@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PDF Pro</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; width: 340px; margin: 0; padding: 14px; color: #0f172a; background: #fff; }
+    h1 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+    .tag { background: #dc2626; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
+    p { font-size: 12px; color: #475569; line-height: 1.45; margin: 6px 0; }
+    button { width: 100%; padding: 9px 10px; margin: 5px 0; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; font-weight: 600; cursor: pointer; font-size: 13px; text-align: left; }
+    button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    button:disabled { opacity: .5; cursor: default; }
+    input[type=url] { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
+    .row { display: flex; gap: 6px; align-items: center; }
+    .row input { flex: 1; }
+    .row button { width: auto; margin: 0; padding: 7px 10px; }
+    .error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 8px; padding: 8px; font-size: 12px; margin: 8px 0; display: none; }
+    .ok { color: #166534; font-size: 12px; min-height: 16px; }
+    hr { border: 0; border-top: 1px solid #e2e8f0; margin: 10px 0; }
+    input[type=file] { display: none; }
+    details summary { font-size: 12px; color: #334155; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>PDF Pro <span class="tag">MV3</span></h1>
+  <p>Edit, convert, OCR and sign PDFs. Files open in the PDF Pro editor tab and are processed in your browser.</p>
+
+  <div id="error" class="error" role="alert"></div>
+
+  <button id="open-editor" class="primary">Open full editor</button>
+  <button id="open-file">Open a PDF from this computer…</button>
+  <input id="file-input" type="file" accept="application/pdf,.pdf">
+  <button id="convert">Convert files</button>
+  <button id="ocr">Run OCR on a scan</button>
+
+  <div id="grant-wrap" hidden>
+    <hr>
+    <p><strong>This site&apos;s PDFs</strong>: PDF Pro needs your permission to download PDF links from this site when you use the right-click menu.</p>
+    <button id="grant">Allow access to this site</button>
+  </div>
+
+  <hr>
+  <label style="font-size:12px;font-weight:600;">PDF Pro web address</label>
+  <div class="row">
+    <input id="url" type="url" placeholder="http://localhost:3000">
+    <button id="save-url">Save</button>
+  </div>
+  <div id="status" class="ok" role="status"></div>
+
+  <details>
+    <summary>What permissions does PDF Pro use?</summary>
+    <p><b>contextMenus</b> adds “Open in PDF Pro” to links and PDF pages.<br>
+    <b>storage</b> saves the PDF Pro web address.<br>
+    <b>activeTab</b> lets this popup read the current tab&apos;s address when you click the toolbar icon.<br>
+    <b>Optional site access</b> is requested only when you click “Allow access”, for the site you choose.
+    PDF Pro does not read pages, scripts or content of websites, and cannot access browser-internal pages.</p>
+  </details>
+
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

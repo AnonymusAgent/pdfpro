@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+build
+coverage
+test-results
+playwright-report
+.env
+.env.local
+next-env.d.ts
+*.tsbuildinfo
+public/vendor/tessdata/*.gz.bak
