@@ -132,7 +132,7 @@ Not yet tested automatically: OCR accuracy against a scanned-document corpus; Of
 
 1. Download the ZIP from the Extension page (or use `public/extension/`).
 2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select the folder.
-3. Open the PDF Pro popup and set your PDF Pro address. For a non-localhost origin, add it to `externally_connectable.matches` in `manifest.json` and reload the extension.
+3. Open the PDF Pro popup and set your PDF Pro address. The downloaded ZIP automatically lists the origin you downloaded it from in `externally_connectable.matches`; if you serve PDF Pro from another origin, download a fresh ZIP there and reload the extension.
 4. Right-click a PDF link → **Open linked PDF in PDF Pro**, or open a PDF page → **Open this PDF in PDF Pro**.
 
 Permissions (`manifest.json`): `contextMenus`, `storage`, `activeTab`, and optional host access (`http://*/*`, `https://*/*`) requested per site from the popup when you click **Allow access**. The extension does not read web pages, inject scripts, or access `chrome://` pages. PDFs up to 40 MB are handed to the editor through the extension's IndexedDB and a one-time identifier (see `docs/API.md`).
@@ -151,7 +151,7 @@ The application reads no other secrets. Nothing is embedded in the client bundle
 - Run `node scripts/setup-assets.mjs` as part of the build pipeline so PDF.js and Tesseract assets are present in `public/vendor`.
 - The application makes no server-side document conversions and needs no conversion workers, queues or object storage.
 - LibreOffice, Ghostscript or another engine is needed only for the features marked ❌ above; they are not wired into this build.
-- Update `externally_connectable` in the extension manifest to the deployed origin before distributing the extension.
+- Download the extension ZIP from the deployed origin so its `externally_connectable` list contains that origin.
 
 ## Limitations (summary)
 

@@ -24,7 +24,7 @@ Install (developer mode):
 2. Open chrome://extensions and turn on "Developer mode".
 3. Click "Load unpacked" and choose the unzipped folder.
 4. Open the PDF Pro toolbar popup and set your PDF Pro address (for example http://localhost:3000).
-5. Add that address to "externally_connectable" in manifest.json if you use another origin, then reload the extension.
+5. The ZIP already lists the address you downloaded it from in "externally_connectable". If you open PDF Pro from another address, download a fresh ZIP there and reload the extension.
 
 Permissions:
 - contextMenus: "Open linked PDF in PDF Pro" and "Open this PDF in PDF Pro" menu items.
@@ -47,7 +47,19 @@ export default function ExtensionPanel() {
       for (const f of FILES) {
         const res = await fetch(`/extension/${f}`);
         if (!res.ok) throw new Error(`Missing extension file: ${f}`);
-        zip.file(f, await res.arrayBuffer());
+        const data = await res.arrayBuffer();
+        if (f !== "manifest.json") {
+          zip.file(f, data);
+          continue;
+        }
+        const manifest = JSON.parse(new TextDecoder().decode(data)) as {
+          externally_connectable?: { matches?: string[] };
+          [key: string]: unknown;
+        };
+        const matches = new Set(manifest.externally_connectable?.matches ?? []);
+        matches.add(`${window.location.origin}/*`);
+        manifest.externally_connectable = { ...manifest.externally_connectable, matches: [...matches] };
+        zip.file(f, `${JSON.stringify(manifest, null, 2)}\n`);
       }
       zip.file("README.txt", README);
       downloadBytes(await zip.generateAsync({ type: "uint8array" }), "pdf-pro-extension.zip", "application/zip");
@@ -62,8 +74,12 @@ export default function ExtensionPanel() {
     setPingResult(null);
     const chromeApi = (globalThis as unknown as { chrome?: { runtime?: { sendMessage: (id: string, m: unknown, cb: (r: unknown) => void) => void; lastError?: { message?: string } } } }).chrome;
     const rt = chromeApi?.runtime;
+    if (!chromeApi) {
+      setPingResult("This browser does not expose Chrome extension APIs. Open this page in Chrome or Edge.");
+      return;
+    }
     if (!rt?.sendMessage) {
-      setPingResult("This browser is not Chrome with the extension available. Install the extension and open this page in Chrome.");
+      setPingResult(`Chrome is running, but this page cannot message the extension. Either the extension is not installed, or ${window.location.origin} is not in its "externally_connectable" list. Download a fresh ZIP from this page (it includes this address) and load it in chrome://extensions.`);
       return;
     }
     if (!/^[a-p]{32}$/.test(extId.trim())) {
