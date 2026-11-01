@@ -21,6 +21,8 @@
     "pretest:integration": "npm run build"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/lib-storage": "^3.1161.0",
     "@cantoo/pdf-lib": "^2.11.1",
     "@tesseract.js-data/eng": "^1.0.0",
     "docx": "^9.14.0",

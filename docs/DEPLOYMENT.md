@@ -9,8 +9,8 @@ accounts, storage metadata, files you upload to the cloud manager and billing.
 | Component      | Minimum                                     | Notes                                                     |
 | -------------- | ------------------------------------------- | --------------------------------------------------------- |
 | Node.js        | 22                                          | The app uses native `fetch`, `File` and streaming uploads |
-| PostgreSQL     | 14+                                         | Supabase, RDS, Cloud SQL, Neon or self-hosted             |
-| Object storage | local disk **or** a private Supabase bucket | `STORAGE_DRIVER=local                                     | supabase` |
+| PostgreSQL     | 14+                                         | Neon, RDS, Cloud SQL, Supabase or self-hosted             |
+| Object storage | local disk or a private S3 bucket           | `STORAGE_DRIVER=local` or `s3` (Neon Object Storage, R2…) |
 | HTTPS          | required                                    | Secure cookies, OAuth redirects, checkout return URLs     |
 | Scheduler      | every 15 min                                | Calls `POST /api/cron/maintenance`                        |
 
@@ -59,10 +59,24 @@ responses and exists only for local development and automated tests.
 keyed `users/<userId>/<fileId>.pdf`. Mount a persistent volume, back it up with the database,
 and keep it out of the container image. Uploads stream to disk; nothing is buffered in memory.
 
-**Supabase Storage** (`STORAGE_DRIVER=supabase`): create a **private** bucket
-(`SUPABASE_STORAGE_BUCKET`, default `pdfpro-files`), then set `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`. The service-role key stays server-side; browsers only ever see
-signed URLs issued by `/api/files/{id}/url`.
+**S3-compatible bucket** (`STORAGE_DRIVER=s3`): works with Neon Object Storage, Cloudflare R2,
+AWS S3, MinIO and Backblaze B2. Create a **private** bucket, then provide credentials — either
+the explicit `S3_*` names or the AWS-standard variables that Neon writes on deploy:
+
+```bash
+STORAGE_DRIVER=s3
+S3_BUCKET=pdfpro-files
+# Neon Object Storage (endpoint + credentials are injected by `neon deploy`)
+S3_ENDPOINT=https://<region>.aws.neon.tech/storage
+S3_REGION=us-east-2
+S3_ACCESS_KEY_ID=…
+S3_SECRET_ACCESS_KEY=…
+S3_FORCE_PATH_STYLE=true     # default; required by Neon, R2 and MinIO
+```
+
+Full walkthrough, including the Neon Console path: [`docs/STORAGE_SETUP.md`](STORAGE_SETUP.md).
+Credentials stay server-side; browsers only ever see signed URLs issued by
+`/api/files/{id}/url`.
 
 Either way, a deployment **must not** expose the storage location directly. Downloads go
 through `/api/files/{id}/download`, which re-checks ownership or validates an HMAC signature.
@@ -76,7 +90,8 @@ through `/api/files/{id}/download`, which re-checks ownership or validates an HM
 - Row-level security policies are installed on the tenant tables for defence in depth. The
   owning database role bypasses RLS, so application-level checks remain the primary control.
 - Scaling: each instance keeps a pool of `PG_POOL_MAX` (default 10) connections. Set
-  `PG_POOL_MAX` for your plan and use a pooler (pgBouncer, Supabase pooler) in front of the
+  `PG_POOL_MAX` for your plan and use a pooler (pgBouncer, or the pooled connection string
+  Neon, Supabase and most managed providers offer) in front of the
   database if you run many instances.
 
 ## 6. Scheduler

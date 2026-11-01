@@ -167,7 +167,10 @@ export async function uploadPdfFile(params: {
   }
 
   try {
-    await driver.putStream(storageKey, Readable.from(remainder()).pipe(hasher), { contentType: "application/pdf" });
+    await driver.putStream(storageKey, Readable.from(remainder()).pipe(hasher), {
+      contentType: "application/pdf",
+      contentLength: declaredSize,
+    });
   } catch (error) {
     await driver.delete(storageKey).catch(() => undefined);
     throw new HttpError(500, "The file could not be stored. Please try again.", "storage_write_failed", {
@@ -179,6 +182,15 @@ export async function uploadPdfFile(params: {
   if (sizeBytes === 0) {
     await driver.delete(storageKey);
     throw new HttpError(400, "The uploaded file is empty.", "empty_file");
+  }
+  if (sizeBytes !== declaredSize) {
+    // The request body was truncated or padded in transit: never keep a partial
+    // object, and never charge the quota for it either.
+    await driver.delete(storageKey).catch(() => undefined);
+    throw new HttpError(400, "The upload was interrupted. Please try again.", "upload_incomplete", {
+      receivedBytes: sizeBytes,
+      expectedBytes: declaredSize,
+    });
   }
 
   const checksum = hash.digest("hex");

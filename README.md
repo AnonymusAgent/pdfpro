@@ -158,7 +158,7 @@ Re-run `node scripts/setup-assets.mjs` after upgrading `pdfjs-dist`, `tesseract.
 
 ```bash
 npm run build                   # integration tests run against the production build
-npm run test:unit               # Vitest: 77 unit tests
+npm run test:unit               # Vitest: 89 unit tests
 npm run test:integration        # Vitest + HTTP: 44 tests (needs a database and a free port 3300)
 npx playwright install chromium # once; on Linux also: sudo npx playwright install-deps chromium
 npm run test:e2e                # Playwright: 21 browser workflows against the production build
@@ -207,14 +207,14 @@ Every variable is documented in [`.env.example`](.env.example). The short versio
 | `EMAIL_TRANSPORT` + `SMTP_*` or `RESEND_API_KEY` | for real email     | `console` prints emails to the log and the outbox                        |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`      | for Google sign-in | OAuth with PKCE                                                          |
 | `SAFEPAY_*`                                      | for payments       | Merchant keys, webhook secret, environment (see `docs/SAFEPAY_SETUP.md`) |
-| `STORAGE_DRIVER` + `SUPABASE_*`                  | optional           | Private Supabase bucket instead of local disk                            |
+| `STORAGE_DRIVER=s3` + `S3_*` / `AWS_*`           | optional           | Private S3-compatible bucket (Neon Object Storage, R2, S3, MinIO)        |
 | `ADSENSE_*`                                      | optional           | Advertising (see `docs/ADSENSE_SETUP.md`)                                |
 | `ADMIN_EMAILS`                                   | optional           | Addresses that become administrators on first verified sign-in           |
 | `CRON_SECRET`                                    | recommended        | Bearer secret for `/api/cron/maintenance`                                |
 
 Only `NEXT_PUBLIC_*` variables can reach the browser bundle, and none of them carry secrets.
-Service-role keys and payment secrets are read exclusively in server components and route
-handlers.
+Object-storage credentials and payment secrets are read exclusively in server components and
+route handlers.
 
 ## Deployment notes
 
@@ -226,7 +226,8 @@ handlers.
 - Schedule `POST /api/cron/maintenance` every 15 minutes with `Authorization: Bearer $CRON_SECRET`: it expires lapsed subscriptions (restoring the Free quota without touching files) and prunes counters.
 - Back up PostgreSQL **and** the storage bucket/directory together.
 
-Full instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), payments in
+Full instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), object storage in
+[`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md), payments in
 [`docs/SAFEPAY_SETUP.md`](docs/SAFEPAY_SETUP.md), advertising in
 [`docs/ADSENSE_SETUP.md`](docs/ADSENSE_SETUP.md), and the current verification status in
 [`docs/TESTING_REPORT.md`](docs/TESTING_REPORT.md).

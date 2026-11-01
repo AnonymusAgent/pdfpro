@@ -81,14 +81,12 @@ export const config = {
   },
 
   storage: {
-    /** `local` (private directory) or `supabase` (private Supabase Storage bucket). */
-    driver: (str(process.env.STORAGE_DRIVER, "local").toLowerCase() === "supabase" ? "supabase" : "local") as
-      | "local"
-      | "supabase",
+    /**
+     * `local` (private directory) or `s3` (any S3-compatible bucket, including
+     * Neon Object Storage, Cloudflare R2, AWS S3 and MinIO).
+     */
+    driver: (str(process.env.STORAGE_DRIVER, "local").toLowerCase() === "s3" ? "s3" : "local") as "local" | "s3",
     dir: str(process.env.STORAGE_DIR, ".data/storage"),
-    bucket: str(process.env.SUPABASE_STORAGE_BUCKET, "pdfpro-files"),
-    supabaseUrl: str(process.env.SUPABASE_URL),
-    supabaseServiceKey: str(process.env.SUPABASE_SERVICE_ROLE_KEY),
     /** HMAC secret for temporary signed download URLs. Falls back to a derived secret. */
     signingSecret: str(process.env.STORAGE_SIGNING_SECRET, str(process.env.AUTH_SECRET, "pdfpro-development-signing-secret")),
     signedUrlTtlSeconds: int(process.env.STORAGE_SIGNED_URL_TTL, 300),
