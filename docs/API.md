@@ -50,14 +50,14 @@ The endpoints below were added with accounts, cloud storage and billing. Every m
   },
   "entitlements": {
     "plan": "free",
-    "quotaBytes": 2000000000,
+    "quotaBytes": 209715200,
     "usedBytes": 0,
     "fileCount": 0,
-    "maxUploadBytes": 104857600,
+    "maxUploadBytes": 52428800,
     "storage": {
       "usedBytes": 0,
-      "quotaBytes": 2000000000,
-      "remainingBytes": 2000000000,
+      "quotaBytes": 209715200,
+      "remainingBytes": 209715200,
       "percentUsed": 0,
       "fileCount": 0,
       "overQuota": false,
@@ -183,7 +183,7 @@ Every route below calls `requireAdmin()`; anonymous callers get `401`, non-admin
 | POST   | `/api/cron/maintenance` | Expire subscriptions, finish pending deletions, prune rate limiters. Requires `Authorization: Bearer $CRON_SECRET` (or an administrator session). |
 | GET    | `/api/cron/maintenance` | Returns a hint; safe to poke with an uptime monitor.                                                                                              |
 
-Run the maintenance job every 15 minutes. It is what moves a lapsed subscription to `expired` and restores the Free 2 GB quota — files are never touched by it.
+Run the maintenance job every 15 minutes. It is what moves a lapsed subscription to `expired` and restores the Free-plan quota — files are never touched by it.
 
 ## Documents
 

@@ -44,7 +44,7 @@ Legend: ✅ implemented and covered by an automated test · 🟡 implemented but
 | Optional-content layers (visibility toggles)                                                                              | ❌     | Not implemented                                                                                    |
 | Chrome extension (MV3): context menus, popup, hand-off to editor                                                          | 🟡     | Packaging and manifest verified by tests; not yet exercised in a real Chrome profile (see Testing) |
 | Accounts: email + password, verification, Google sign-in, reset, multi-device sessions                                    | ✅     | scrypt passwords, hashed opaque session tokens, per-device revocation                              |
-| Personal cloud storage (upload, preview, rename, delete, search, sort)                                                    | ✅     | Free 2 GB / Premium 10 GB, private keys, signed URLs, server-side quota                            |
+| Personal cloud storage (upload, preview, rename, delete, search, sort)                                                    | ✅     | Free 200 MB / Premium 2 GB (free-tier sizing, admin-editable), private keys, signed URLs, server-side quota |
 | Subscriptions: monthly + yearly Premium, admin-editable prices, lifecycle                                                 | ✅     | Safepay hosted checkout; Premium only on a verified payment; prices come from the database         |
 | Admin dashboard: users, subscriptions, payments, pricing, settings, email/webhook logs                                    | ✅     | Server-side RBAC, role grants only from `ADMIN_EMAILS`/CLI, every action audited                   |
 | Google AdSense for Free accounts                                                                                          | 🟡     | Implemented and gated; **disabled until approved publisher id and slot ids are supplied**          |
@@ -61,7 +61,9 @@ Legend: ✅ implemented and covered by an automated test · 🟡 implemented but
 | Checkout return / abandon                    | `/billing/return`, `/billing/cancelled`                                       | Signed in                                |
 | Administration                               | `/admin`                                                                      | `admin_roles` members only               |
 
-Plan limits: Free = 2,000,000,000 bytes (2 GB), Premium = 10,000,000,000 bytes (10 GB).
+Plan limits: Free = 209,715,200 bytes (200 MiB), Premium = 2,147,483,648 bytes (2 GiB). Both are sized for the free
+tiers this app runs on (Cloudflare R2: 10 GB of objects, Neon: 1 GB of Postgres) and are configurable —
+`FREE_PLAN_STORAGE_BYTES` / `PREMIUM_PLAN_STORAGE_BYTES` per deployment, or per plan in Admin → Pricing.
 Downgrades never delete files: uploads are blocked while the account is over quota and every
 existing file stays downloadable. There is no code path that grants Premium from a browser
 response — activation happens only in `activatePaidPayment`, reached from a signed webhook or a
@@ -129,7 +131,8 @@ Prerequisites: Node.js 22 or newer, PostgreSQL 14+.
 
 ```bash
 npm install
-cp .env.example .env            # set DATABASE_URL, AUTH_SECRET, STORAGE_SIGNING_SECRET
+cp .env.local.example .env.local   # Neon + R2 template with placeholder values (.env.local is git-ignored)
+# ...or start from .env.example and set DATABASE_URL, AUTH_SECRET, STORAGE_SIGNING_SECRET by hand
 node scripts/setup-assets.mjs   # copies offline runtime assets into public/ and generates extension icons
 npm run db:dev                  # optional: embedded PostgreSQL on 127.0.0.1:5432 (terminal 1)
 npm run db:migrate              # creates/upgrades every table (terminal 2)
@@ -196,7 +199,9 @@ Permissions (`manifest.json`): `contextMenus`, `storage`, `activeTab`, and optio
 
 ## Environment variables
 
-Every variable is documented in [`.env.example`](.env.example). The short version:
+Every variable is documented in [`.env.example`](.env.example), and
+[`.env.local.example`](.env.local.example) is a ready-to-copy template pre-set for
+Neon + Cloudflare R2 (dummy values only — never commit the filled-in `.env.local`). The short version:
 
 | Variable                                         | Required           | Purpose                                                                  |
 | ------------------------------------------------ | ------------------ | ------------------------------------------------------------------------ |
@@ -207,7 +212,8 @@ Every variable is documented in [`.env.example`](.env.example). The short versio
 | `EMAIL_TRANSPORT` + `SMTP_*` or `RESEND_API_KEY` | for real email     | `console` prints emails to the log and the outbox                        |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`      | for Google sign-in | OAuth with PKCE                                                          |
 | `SAFEPAY_*`                                      | for payments       | Merchant keys, webhook secret, environment (see `docs/SAFEPAY_SETUP.md`) |
-| `STORAGE_DRIVER=s3` + `S3_*` / `AWS_*`           | optional           | Private S3-compatible bucket (Neon Object Storage, R2, S3, MinIO)        |
+| `STORAGE_DRIVER=s3` + `S3_*` / `AWS_*`           | for cloud storage  | Private bucket — Cloudflare R2 recommended (see `docs/STORAGE_SETUP.md`) |
+| `FREE_PLAN_STORAGE_BYTES` / `PREMIUM_PLAN_STORAGE_BYTES` | optional   | Quota defaults (200 MiB / 2 GiB); Admin → Pricing overrides per plan    |
 | `ADSENSE_*`                                      | optional           | Advertising (see `docs/ADSENSE_SETUP.md`)                                |
 | `ADMIN_EMAILS`                                   | optional           | Addresses that become administrators on first verified sign-in           |
 | `CRON_SECRET`                                    | recommended        | Bearer secret for `/api/cron/maintenance`                                |
@@ -226,7 +232,8 @@ route handlers.
 - Schedule `POST /api/cron/maintenance` every 15 minutes with `Authorization: Bearer $CRON_SECRET`: it expires lapsed subscriptions (restoring the Free quota without touching files) and prunes counters.
 - Back up PostgreSQL **and** the storage bucket/directory together.
 
-Full instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), object storage in
+Full instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), Neon in
+[`docs/NEON_SETUP.md`](docs/NEON_SETUP.md), object storage in
 [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md), payments in
 [`docs/SAFEPAY_SETUP.md`](docs/SAFEPAY_SETUP.md), advertising in
 [`docs/ADSENSE_SETUP.md`](docs/ADSENSE_SETUP.md), and the current verification status in

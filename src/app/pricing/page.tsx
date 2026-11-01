@@ -4,7 +4,8 @@ import { Check, Crown, Sparkles, X } from "lucide-react";
 import { AdSlot } from "@/components/ads/ad-slot";
 import { PlanCheckoutButton } from "@/components/billing/plan-checkout";
 import { PageTitle } from "@/components/ui";
-import { formatMoneyMinor, FREE_STORAGE_BYTES, gigabytes, PREMIUM_STORAGE_BYTES } from "@/lib/plans";
+import { formatMoneyMinor, planStorageLabel } from "@/lib/plans";
+import { config } from "@/lib/server/config";
 import { getBillingSettings } from "@/lib/server/platform-settings";
 import { listPlans, listProviderStatus, serializePlan } from "@/lib/server/payments/billing";
 import { readSession } from "@/lib/server/session";
@@ -12,7 +13,7 @@ import { getEntitlements } from "@/lib/server/entitlements";
 
 export const metadata: Metadata = {
   title: "Pricing — Free and Premium PDF storage",
-  description: "Free PDF tools with 2 GB of private cloud storage. Premium adds 10 GB and removes all advertising.",
+  description: `Free PDF tools with ${planStorageLabel(config.plans.freeStorageBytes)} of private cloud storage. Premium adds ${planStorageLabel(config.plans.premiumStorageBytes)} and removes all advertising.`,
 };
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export default async function PricingPage() {
   const ordered = [monthly, yearly].filter(Boolean) as typeof plans;
 
   const comparison: { feature: string; free: string | boolean; premium: string | boolean }[] = [
-    { feature: "Cloud storage", free: gigabytes(FREE_STORAGE_BYTES), premium: gigabytes(PREMIUM_STORAGE_BYTES) },
+    { feature: "Cloud storage", free: planStorageLabel(config.plans.freeStorageBytes), premium: planStorageLabel(config.plans.premiumStorageBytes) },
     { feature: "PDF uploads to cloud", free: true, premium: true },
     { feature: "File preview", free: true, premium: true },
     { feature: "File downloads", free: true, premium: true },
@@ -77,7 +78,7 @@ export default async function PricingPage() {
           </p>
           <ul className="mt-5 space-y-2 text-sm text-slate-700 dark:text-slate-300">
             {[
-              `${gigabytes(FREE_STORAGE_BYTES)} private cloud storage`,
+              `${planStorageLabel(config.plans.freeStorageBytes)} private cloud storage`,
               "All browser PDF tools",
               "File preview, download and management",
               "Access from any device",
@@ -146,7 +147,9 @@ export default async function PricingPage() {
                 </p>
               )}
               <ul className="mt-5 space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                {(plan.features.length ? plan.features : ["10 GB cloud storage", "Completely ad-free", "Premium badge"]).map((feature) => (
+                {(plan.features.length
+                    ? plan.features
+                    : [`${planStorageLabel(config.plans.premiumStorageBytes)} cloud storage`, "Completely ad-free", "Premium badge"]).map((feature) => (
                   <li key={feature} className="flex gap-2">
                     <Sparkles size={15} className="mt-0.5 shrink-0 text-blue-600" aria-hidden />
                     <span>{feature}</span>

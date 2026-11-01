@@ -1,5 +1,10 @@
 /** Branded transactional email bodies. Text is the source of truth; HTML is a shell around it. */
 import { config } from "./config";
+import { planStorageLabel } from "@/lib/plans";
+
+/** Plan quota labels, read from the deployment configuration (never hardcoded). */
+const FREE_LABEL = planStorageLabel(config.plans.freeStorageBytes);
+const PREMIUM_LABEL = planStorageLabel(config.plans.premiumStorageBytes);
 
 function shell(bodyHtml: string): string {
   return `<!doctype html>
@@ -98,7 +103,7 @@ export function paymentFailedEmail(params: { displayName: string | null; planNam
     "Update your payment method or try again here:",
     params.billingUrl,
     "",
-    "Your files are never deleted — if Premium ends, your account returns to the Free plan (2 GB) and existing files stay safe.",
+    `Your files are never deleted — if Premium ends, your account returns to the Free plan (${FREE_LABEL}) and existing files stay safe.`,
     "",
     "— The PDF Pro team",
   ].join("\n");
@@ -107,7 +112,7 @@ export function paymentFailedEmail(params: { displayName: string | null; planNam
     <p>We could not confirm the latest payment for your <strong>${escapeHtml(params.planName)}</strong> subscription.</p>
     <p>${escapeHtml(grace)}</p>
     ${button(params.billingUrl, "Review my billing")}
-    <p style="color:#475569;font-size:13px">Your files are never deleted — if Premium ends, your account returns to the Free plan (2 GB) and existing files stay safe.</p>
+    <p style="color:#475569;font-size:13px">Your files are never deleted — if Premium ends, your account returns to the Free plan (${escapeHtml(FREE_LABEL)}) and existing files stay safe.</p>
   `);
   return { subject: "Action needed: PDF Pro payment could not be confirmed", text, html };
 }
@@ -119,7 +124,7 @@ export function premiumActivatedEmail(params: { displayName: string | null; plan
     `Hi ${name},`,
     "",
     `Your ${params.planName} subscription is active${until}.`,
-    "You now have 10 GB of private cloud storage, an ad-free experience and a Premium badge.",
+    `You now have ${PREMIUM_LABEL} of private cloud storage, an ad-free experience and a Premium badge.`,
     "",
     "Open your dashboard:",
     params.dashboardUrl,
@@ -129,7 +134,7 @@ export function premiumActivatedEmail(params: { displayName: string | null; plan
   const html = shell(`
     <p>Hi ${escapeHtml(name)},</p>
     <p>Your <strong>${escapeHtml(params.planName)}</strong> subscription is active${escapeHtml(until)}.</p>
-    <p>You now have 10 GB of private cloud storage, an ad-free experience and a Premium badge.</p>
+    <p>You now have ${escapeHtml(PREMIUM_LABEL)} of private cloud storage, an ad-free experience and a Premium badge.</p>
     ${button(params.dashboardUrl, "Open my dashboard")}
   `);
   return { subject: "Your PDF Pro Premium subscription is active", text, html };

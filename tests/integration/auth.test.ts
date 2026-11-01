@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_FREE_STORAGE_BYTES } from "@/lib/plans";
 import {
   BASE_URL,
   Client,
@@ -94,7 +95,7 @@ describe("registration and email verification", () => {
 });
 
 describe("login, sessions and logout", () => {
-  it("registers a Free account with the 2 GB quota", async () => {
+  it("registers a Free account with the configured Free quota", async () => {
     const { client, email } = await createUser();
     const session = await client.get<{
       user: { email: string; plan: string; isAdmin: boolean } | null;
@@ -106,7 +107,7 @@ describe("login, sessions and logout", () => {
     expect(session.body.user?.plan).toBe("free");
     expect(session.body.user?.isAdmin).toBe(false);
     expect(session.body.entitlements.plan).toBe("free");
-    expect(session.body.entitlements.quotaBytes).toBe(2_000_000_000);
+    expect(session.body.entitlements.quotaBytes).toBe(DEFAULT_FREE_STORAGE_BYTES);
     expect(session.body.entitlements.storage.usedBytes).toBe(0);
     expect(session.body.features.googleSignIn).toBe(false);
   });

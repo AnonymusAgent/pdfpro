@@ -19,6 +19,7 @@ import {
   subscriptions,
   users,
 } from "@/db/schema";
+import { planStorageLabel } from "@/lib/plans";
 import { HttpError } from "../api";
 import { config, resolveAppUrl } from "../config";
 import { sanitizeText } from "../crypto";
@@ -512,7 +513,7 @@ export async function announceActivation(outcome: ActivationOutcome, request?: R
     userId: sub.sub.userId,
     kind: outcome.status === "extended" ? "subscription_renewed" : "subscription_activated",
     title: outcome.status === "extended" ? "Premium renewed" : "Premium activated",
-    body: `${sub.plan?.name ?? "Premium"} is active${periodEnd ? ` until ${periodEnd.toUTCString()}` : ""}. You have 10 GB of storage and no advertisements.`,
+    body: `${sub.plan?.name ?? "Premium"} is active${periodEnd ? ` until ${periodEnd.toUTCString()}` : ""}. You have ${planStorageLabel(config.plans.premiumStorageBytes)} of storage and no advertisements.`,
     email: user.email,
     displayName: user.displayName,
     sendEmailCopy: false,
@@ -1021,7 +1022,7 @@ export type LifecycleResult = { expired: number; pastDueExpired: number; pending
 
 /**
  * Downgrades subscriptions whose paid term has ended. Files are preserved:
- * the quota simply drops to 2 GB and further uploads are blocked while the
+ * the quota simply drops back to the Free allowance and further uploads are blocked while the
  * account is over it.
  */
 export async function syncSubscriptionLifecycle(): Promise<LifecycleResult> {
@@ -1082,7 +1083,7 @@ export async function syncSubscriptionLifecycle(): Promise<LifecycleResult> {
       userId: row.user_id,
       kind: "subscription_expired",
       title: "Premium has ended",
-      body: "Your account is back on the Free plan with 2 GB of storage. Your files were not deleted — delete some files or upgrade again to upload more.",
+      body: `Your account is back on the Free plan with ${planStorageLabel(config.plans.freeStorageBytes)} of storage. Your files were not deleted — delete some files or upgrade again to upload more.`,
       email: user.email,
       displayName: user.displayName,
       sendEmailCopy: true,

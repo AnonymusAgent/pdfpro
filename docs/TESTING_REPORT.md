@@ -11,15 +11,33 @@ claimed without a run. Commands are reproducible from a clean checkout.
 | Lint (new code)   | `npx eslint src/components/{auth,ads,billing,cloud,account,admin} src/lib/server src/app/api tests scripts` | **0 errors, 0 warnings**                                                                                                                                                                                                           |
 | Lint (whole repo) | `npx eslint .`                                                                                              | 0 errors in this work; 13 pre-existing errors remain in `EditorWorkspace.tsx`, `PageView.tsx`, `OcrWorkspace.tsx` (refs read during render / setState in effect) — untouched legacy editor code                                    |
 | Production build  | `npm run build`                                                                                             | **success**, 41 routes compiled (all SaaS routes dynamic `ƒ`)                                                                                                                                                                      |
-| Unit tests        | `npm run test:unit`                                                                                         | **77 passed / 77** in 10 files                                                                                                                                                                                                     |
+| Unit tests        | `npm run test:unit`                                                                                         | **89 passed / 89** in 11 files                                                                                                                                                                                                     |
 | Integration tests | `npm run build && npm run test:integration`                                                                 | **44 passed / 44** in 4 files, ~7 s                                                                                                                                                                                                |
 | Browser e2e       | `npm run test:e2e`                                                                                          | **not executed here**: `npx playwright install chromium` fails in this sandbox (download blocked, no system Chrome). The 21 specs collect successfully (`npx playwright test --list`) and run in CI/local with browsers installed. |
+
+### Free-tier quota profile (verified on 2026-11-02)
+
+The quotas were re-sized for the free tiers this deployment runs on (Cloudflare R2 = 10 GB of
+objects, Neon = 1 GB of Postgres per project). Verification performed on a freshly migrated
+database:
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Migration applies cleanly | `npm run db:migrate` | `0001` then `0002_free_tier_storage_quotas.sql` applied, `Applied 2 migration(s).` |
+| Plan rows re-sized | `select storage_bytes from subscription_plans` | both plans `2147483648` (2 GiB), descriptions rewritten to "2 GB cloud storage" |
+| Upload cap seeded | `select value from settings where key = 'storage'` | `{"maxUploadBytes": 52428800}` (50 MiB) |
+| Free entitlement | integration `auth` suite | `entitlements.quotaBytes === 209715200` (200 MiB) |
+| Premium entitlement | integration `billing` suite | quota becomes the plan row's `2147483648` after a signed webhook |
+| Downgrade keeps files | integration `billing` suite | quota drops to 200 MiB, file count unchanged, uploads blocked |
+
+The migration only rewrites rows that still carry the old seeded defaults, so plan prices,
+quotas and descriptions an administrator has already edited are preserved.
 
 ## 2. Unit tests (`tests/unit`)
 
 | File                      | Covers                                                                                                                                                                                                                                                                                                                       |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plans.test.ts`           | 2 GB / 10 GB constants, remaining/percent maths, over-quota blocking without deleting files, negative-usage guard, byte and money formatting                                                                                                                                                                                 |
+| `plans.test.ts`           | default 200 MB / 2 GB quota constants (free-tier sizing) + label formatting, remaining/percent maths, over-quota blocking without deleting files, negative-usage guard, byte and money formatting                                                                                                                                                                                 |
 | `security.test.ts`        | scrypt hash/verify, per-hash salt, malformed hash rejection, HMAC-SHA256/512, constant-time compare, token hashing, email/password policy, text sanitising, file-name traversal (`../../etc/passwd` → `passwd.pdf`)                                                                                                          |
 | `payments.test.ts`        | Safepay webhook HMAC-SHA512 accept/reject (tampering, wrong secret, missing header), redirect signature (HMAC-SHA256 over tracker), month/year period arithmetic, the exact Premium access rule for `active`/`pending`/`expired`/`past_due`+grace/`cancelled`, signed download tokens (foreign file, forged payload, expiry) |
 | plus 7 pre-existing files | geometry, layout, export, operations, conversions, validation, OCR helpers — 53 tests; fixtures are now generated by `npm run fixtures`                                                                                                                                                                                      |
@@ -57,14 +75,14 @@ setup/verification.
 
 ### Billing and lifecycle (14 tests)
 
-- Plan catalogue comes from the database (`150000` / `1500000` PKR minor units, 10 GB, monthly + yearly).
+- Plan catalogue comes from the database (`150000` / `1500000` PKR minor units, 2 GB Premium quota after `drizzle/0002`, monthly + yearly).
 - Unknown plan → `404` before any provider call.
-- **Signed webhook activates Premium**: subscription `active` with a future period end, payment `succeeded` with `paid_at`, quota becomes 10 GB, webhook row stored with `signature_valid = true`.
+- **Signed webhook activates Premium**: subscription `active` with a future period end, payment `succeeded` with `paid_at`, quota becomes the plan's 2 GB, webhook row stored with `signature_valid = true`.
 - **Idempotency**: replaying the same event → `200 duplicate`, period end unchanged; a new event id for an already-paid tracker also returns `duplicate` and does not extend the term.
 - **Invalid signatures**: unsigned and forged-signature deliveries → `401`, nothing activated, payment stays `pending`; a later correctly signed event still activates.
 - **Amount mismatch**: verified but wrong amount → `200 amount_mismatch`, payment `failed`, no Premium.
-- **Grace period**: failed renewal → `past_due` with Premium retained; backdating `grace_until` + maintenance → Free, 2 GB, files still listed and downloadable.
-- **Expiry**: backdating `current_period_end` + maintenance → Free, 2 GB, file count unchanged.
+- **Grace period**: failed renewal → `past_due` with Premium retained; backdating `grace_until` + maintenance → Free quota (200 MB), files still listed and downloadable.
+- **Expiry**: backdating `current_period_end` + maintenance → Free quota (200 MB), file count unchanged.
 - **Cancellation**: cancel-at-period-end keeps Premium, then expiry returns Free; a second cancel is `404`.
 - **Refund**: verified refund marks the payment `refunded` and ends Premium.
 - **Return URL never activates**: unsigned return → not `paid`; bad signature → `failed`; another user's payment id → `unknown` (ownership-scoped); plan stays Free.
@@ -115,8 +133,8 @@ npm run test:e2e
 | #   | Requirement                                       | Evidence                                                                                                                                |
 | --- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Free user can register and verify                 | auth suite: register/verify, `EMAIL_EXPOSE_DEV_LINKS` link                                                                              |
-| 2   | Free user cannot exceed 2 GB                      | storage: "enforces the storage quota server-side"                                                                                       |
-| 3   | Premium quota is 10 GB                            | billing: quota becomes `10,000,000,000` after activation                                                                                |
+| 2   | Free user cannot exceed the Free quota             | storage: "enforces the storage quota server-side" (200 MB by default)                                                                   |
+| 3   | Premium quota is larger than Free                 | billing: quota becomes the plan's `2,147,483,648` bytes after activation                                                                |
 | 4   | Files are private between users                   | storage: "keeps every account's files private"                                                                                          |
 | 5   | Downloads use signed, expiring URLs               | unit token tests + storage signed-URL/inline/expiry cases                                                                               |
 | 6   | Delete reclaims quota                             | storage: "reclaims quota when files are deleted"                                                                                        |

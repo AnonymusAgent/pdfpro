@@ -847,7 +847,7 @@ function SettingsPanel() {
             type="number"
             min={1024}
             max={524288000}
-            value={storage?.maxUploadBytes ?? 104857600}
+            value={storage?.maxUploadBytes ?? 52428800}
             onChange={(event) => storage && setStorage({ maxUploadBytes: Number(event.target.value) })}
           />
           <p className="mt-1 text-xs text-slate-500">Currently {formatBytes(storage?.maxUploadBytes ?? 0)} per file.</p>

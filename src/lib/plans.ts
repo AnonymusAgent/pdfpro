@@ -4,8 +4,25 @@
  * the active subscription on every upload.
  */
 
-export const FREE_STORAGE_BYTES = 2_000_000_000; // 2 GB
-export const PREMIUM_STORAGE_BYTES = 10_000_000_000; // 10 GB
+/**
+ * Default plan quotas, sized for the free tiers this deployment runs on
+ * (Cloudflare R2: 10 GB of object storage, Neon: 1 GB of Postgres per project).
+ *
+ *   Free    200 MB   – roughly 50 accounts fill the R2 free tier
+ *   Premium   2 GB   – roughly 5 paying accounts fill it
+ *
+ * Both are overridable without a code change:
+ *   FREE_PLAN_STORAGE_BYTES / PREMIUM_PLAN_STORAGE_BYTES (server config)
+ *   subscription_plans.storage_bytes                     (admin → pricing)
+ *
+ * Raise them from the admin dashboard once the storage plan is upgraded.
+ */
+export const DEFAULT_FREE_STORAGE_BYTES = 200 * 1024 * 1024; // 200 MiB
+export const DEFAULT_PREMIUM_STORAGE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GiB
+
+/** Browser-side fallbacks; the server always uses the configured values. */
+export const FREE_STORAGE_BYTES = DEFAULT_FREE_STORAGE_BYTES;
+export const PREMIUM_STORAGE_BYTES = DEFAULT_PREMIUM_STORAGE_BYTES;
 
 export type PlanId = "free" | "premium";
 export type BillingInterval = "month" | "year";
@@ -62,9 +79,18 @@ export function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   const exponent = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
   const value = bytes / 1024 ** exponent;
-  return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${units[exponent]}`;
+  // One decimal for small magnitudes, whole numbers above 10 — and no trailing
+  // ".0", so a 2 GiB quota reads "2 GB" rather than "2.0 GB".
+  const label = value >= 10 || exponent === 0 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");
+  return `${label} ${units[exponent]}`;
 }
 
+/** "200 MB", "2 GB" — the label used for plan quotas in the UI and emails. */
+export function planStorageLabel(bytes: number): string {
+  return formatBytes(bytes);
+}
+
+/** Kept for older copy; prefer planStorageLabel for plan quotas. */
 export function gigabytes(bytes: number): string {
   return `${Math.round((bytes / 1_000_000_000) * 10) / 10} GB`;
 }

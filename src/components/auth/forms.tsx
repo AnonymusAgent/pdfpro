@@ -176,7 +176,7 @@ export function RegisterForm({ googleEnabled }: { googleEnabled: boolean }) {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Free forever with 2 GB of private cloud storage."
+      subtitle="Free forever with private cloud storage."
       footer={
         <span className="text-slate-600 dark:text-slate-400">
           Already have an account?{" "}

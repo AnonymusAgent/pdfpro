@@ -23,8 +23,8 @@ export function AuthShell({
           Private cloud storage for the PDFs you keep coming back to.
         </h1>
         <p className="mt-4 max-w-xl text-sm text-slate-600 dark:text-slate-300">
-          Your tools stay free and browser-based. An account adds 2 GB of private cloud storage, file previews on any
-          device and optional Premium with 10 GB and no advertising.
+          Your tools stay free and browser-based. An account adds private cloud storage, file previews on any device and
+          optional Premium with more space and no advertising.
         </p>
         <ul className="mt-6 space-y-2 text-sm text-slate-700 dark:text-slate-300">
           {[

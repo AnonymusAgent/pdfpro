@@ -20,7 +20,8 @@ import { getEntitlements } from "@/lib/server/entitlements";
 import { listUserPayments } from "@/lib/server/payments/billing";
 import { listUserFiles } from "@/lib/server/files";
 import { readSession } from "@/lib/server/session";
-import { formatBytes, formatMoneyMinor } from "@/lib/plans";
+import { formatBytes, formatMoneyMinor, planStorageLabel } from "@/lib/plans";
+import { config } from "@/lib/server/config";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -161,7 +162,8 @@ export default async function DashboardPage({
           ) : (
             <div className="space-y-3 text-sm">
               <p className="text-slate-600 dark:text-slate-300">
-                Free plan · 2 GB storage · advertisements shown. Upgrade for 10 GB and an ad-free workspace.
+                Free plan · {formatBytes(entitlements.quotaBytes)} storage · advertisements shown. Upgrade for{" "}
+                {planStorageLabel(config.plans.premiumStorageBytes)} and an ad-free workspace.
               </p>
               <Link
                 href="/pricing"

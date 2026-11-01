@@ -23,7 +23,14 @@ import type { CloudFileDTO, StorageSnapshotDTO } from "@/lib/session-types";
 
 type SortKey = "created" | "name" | "size";
 
-export function CloudFileManager({ initialStorage }: { initialStorage: StorageSnapshotDTO | null }) {
+export function CloudFileManager({
+  initialStorage,
+  premiumQuotaLabel = "Premium",
+}: {
+  initialStorage: StorageSnapshotDTO | null;
+  /** Premium quota label, supplied by the server (never hardcoded here). */
+  premiumQuotaLabel?: string;
+}) {
   const { session, premium, refresh } = useSession();
   const [files, setFiles] = useState<CloudFileDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -218,7 +225,7 @@ export function CloudFileManager({ initialStorage }: { initialStorage: StorageSn
           icon={<Upload size={17} className="text-blue-600" aria-hidden />}
           actions={!premium ? (
             <Link href="/pricing" className="rounded-lg bg-amber-400 px-2.5 py-1 text-xs font-bold text-amber-950 hover:bg-amber-300">
-              Upgrade to 10 GB
+              Upgrade to {premiumQuotaLabel}
             </Link>
           ) : undefined}
         >
