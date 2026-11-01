@@ -143,8 +143,11 @@ npm run test:e2e
   sandbox merchant account (`docs/SAFEPAY_SETUP.md`).
 - **Google sign-in not exercised end-to-end** — requires OAuth credentials and a browser; the
   unconfigured path is tested.
-- **Supabase storage driver** is implemented but tested only with the local driver. Verify with a
-  real private bucket before switching `STORAGE_DRIVER=supabase`.
+- **S3 storage driver** (Neon Object Storage, Cloudflare R2, AWS S3, MinIO) is implemented and
+  unit-tested for configuration resolution, credential validation and command mapping (with a
+  stubbed client), but no request has been made against a real bucket from this environment.
+  Verify the round trip against your own private bucket before switching `STORAGE_DRIVER=s3`
+  (see `docs/STORAGE_SETUP.md` for the checklist).
 - **`storage_usage` drift** is prevented by transactional updates, but a manual database edit
   (as the tests do) will desynchronise it from `user_files`; recount with
   `select sum(size_bytes) from user_files where status='active'` if ever in doubt.

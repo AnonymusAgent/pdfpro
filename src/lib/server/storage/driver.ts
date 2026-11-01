@@ -3,13 +3,14 @@
  *
  * Two drivers ship with the application:
  *
- *   local     – a directory outside `public/`, served only through signed,
- *               authenticated API routes. Default; needs no cloud account.
- *   supabase  – a private Supabase Storage bucket, accessed with the service
- *               role key from the server only. Object URLs are never public.
+ *   local  – a directory outside `public/`, served only through signed,
+ *            authenticated API routes. Default; needs no cloud account.
+ *   s3     – any S3-compatible private bucket: Neon Object Storage, Cloudflare
+ *            R2, AWS S3, MinIO, Backblaze. Credentials stay on the server and
+ *            object URLs are never public.
  *
- * The interface is intentionally small so an S3/R2/GCS driver can be added
- * without touching the file service.
+ * The interface is intentionally small so another driver (GCS, Azure Blob) can
+ * be added without touching the file service.
  */
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
@@ -17,8 +18,13 @@ import { dirname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { config } from "../config";
+import { S3StorageDriver } from "./s3";
 
-export type PutOptions = { contentType?: string };
+export type PutOptions = {
+  contentType?: string;
+  /** Exact byte length when it is known up front (it always is for uploads). */
+  contentLength?: number;
+};
 
 export interface StorageDriver {
   readonly name: string;
@@ -34,7 +40,10 @@ export interface StorageDriver {
 /* Local private directory driver                                      */
 /* ------------------------------------------------------------------ */
 
-const LOCAL_ROOT = resolve(process.cwd(), config.storage.dir);
+// Resolve against the working directory without touching `process.cwd()`
+// directly: Turbopack's file tracer otherwise assumes the *entire* project is
+// reachable from this route and inlines it into the server bundle.
+const LOCAL_ROOT = resolve(config.storage.dir);
 
 function localPath(key: string): string {
   const target = resolve(join(LOCAL_ROOT), key);
@@ -83,90 +92,12 @@ class LocalDriver implements StorageDriver {
 }
 
 /* ------------------------------------------------------------------ */
-/* Supabase Storage driver (private bucket)                            */
-/* ------------------------------------------------------------------ */
-
-class SupabaseDriver implements StorageDriver {
-  readonly name = "supabase";
-  private readonly base: string;
-  private readonly bucket: string;
-  private readonly key: string;
-
-  constructor() {
-    this.base = config.storage.supabaseUrl.replace(/\/+$/, "");
-    this.bucket = config.storage.bucket;
-    this.key = config.storage.supabaseServiceKey;
-    if (!this.base || !this.key) {
-      throw new Error("Supabase storage requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
-    }
-  }
-
-  private url(key: string): string {
-    const encodedKey = key.split("/").map(encodeURIComponent).join("/");
-    return `${this.base}/storage/v1/object/${encodeURIComponent(this.bucket)}/${encodedKey}`;
-  }
-
-  private headers(extra: Record<string, string> = {}): Record<string, string> {
-    return { Authorization: `Bearer ${this.key}`, apikey: this.key, ...extra };
-  }
-
-  private async ensureOk(response: Response, action: string): Promise<void> {
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`Supabase storage ${action} failed (${response.status}): ${detail.slice(0, 200)}`);
-    }
-  }
-
-  async put(key: string, data: Buffer, options: PutOptions = {}): Promise<void> {
-    const response = await fetch(this.url(key), {
-      method: "POST",
-      headers: this.headers({
-        "Content-Type": options.contentType ?? "application/octet-stream",
-        "x-upsert": "false",
-      }),
-      body: new Uint8Array(data),
-    });
-    await this.ensureOk(response, "upload");
-  }
-
-  async putStream(key: string, stream: Readable, options: PutOptions = {}): Promise<void> {
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) chunks.push(Buffer.from(chunk as Uint8Array));
-    await this.put(key, Buffer.concat(chunks), options);
-  }
-
-  async get(key: string): Promise<Buffer> {
-    const response = await fetch(this.url(key), { headers: this.headers() });
-    await this.ensureOk(response, "download");
-    return Buffer.from(await response.arrayBuffer());
-  }
-
-  async getStream(key: string): Promise<ReadableStream<Uint8Array>> {
-    const response = await fetch(this.url(key), { headers: this.headers() });
-    await this.ensureOk(response, "download");
-    if (!response.body) throw new Error("Supabase storage returned an empty body");
-    return response.body;
-  }
-
-  async delete(key: string): Promise<void> {
-    const response = await fetch(this.url(key), { method: "DELETE", headers: this.headers() });
-    if (response.status === 404) return;
-    await this.ensureOk(response, "delete");
-  }
-
-  async exists(key: string): Promise<boolean> {
-    const response = await fetch(this.url(key), { method: "HEAD", headers: this.headers() });
-    return response.ok;
-  }
-}
-
-/* ------------------------------------------------------------------ */
 
 let driver: StorageDriver | null = null;
 
 export function getStorageDriver(): StorageDriver {
   if (driver) return driver;
-  driver = config.storage.driver === "supabase" ? new SupabaseDriver() : new LocalDriver();
+  driver = config.storage.driver === "s3" ? new S3StorageDriver() : new LocalDriver();
   return driver;
 }
 

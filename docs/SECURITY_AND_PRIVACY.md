@@ -13,7 +13,7 @@ This document describes what PDF Pro does with your files, what it stores, what 
 | Merge, split, compress, batch                                             | Browser                                                             | No                                                    |
 | Password protection and removal                                           | Browser (pdf-lib fork with the standard security handler)           | No                                                    |
 | Recent list, settings, saved signatures, processing log                   | Server → PostgreSQL                                                 | Metadata only                                         |
-| Cloud storage files (only when you upload to the cloud manager)           | Private object storage (`STORAGE_DIR` or a private Supabase bucket) | Until you delete them; never deleted by a plan change |
+| Cloud storage files (only when you upload to the cloud manager)           | Private object storage (`STORAGE_DIR` or a private S3-compatible bucket) | Until you delete them; never deleted by a plan change |
 | Account record, hashed password, sessions, email tokens                   | PostgreSQL                                                          | Until you delete the account                          |
 | Subscription, payment metadata (ids, amounts, statuses — never card data) | PostgreSQL                                                          | Retained for accounting and dispute handling          |
 | Webhook deliveries from the payment provider                              | PostgreSQL `payment_webhook_events`                                 | Pruned after 180 days by the maintenance job          |
@@ -106,7 +106,7 @@ The server creates **no temporary files** and keeps **no copies of uploaded docu
 
 ## 7b. Cloud storage security
 
-- Buckets/directories are **private**. Files are keyed `users/<userId>/<fileId>.pdf`; there is no public URL.
+- Buckets/directories are **private**. Files are keyed `users/<userId>/<fileId>.pdf`; there is no public URL. With the `s3` driver the bucket must not allow anonymous reads, and the credentials stay on the server.
 - Every read, rename and delete re-checks ownership in SQL (`where id = $1 and user_id = $2`). A foreign id returns `404`, indistinguishable from a missing file.
 - Downloads require either the owner's session or a **signed URL**: an HMAC-SHA256 over `fileId.userId.expiry`, valid for 5 minutes by default (`STORAGE_SIGNED_URL_TTL`). A token cannot be replayed for another file, another user or after expiry.
 - Uploads are validated by signature (`%PDF-`), size and the plan quota before any row is written; the object is written first and removed if the metadata insert fails.
