@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_FREE_STORAGE_BYTES, DEFAULT_PREMIUM_STORAGE_BYTES } from "@/lib/plans";
 import {
   Client,
   createUser,
@@ -48,7 +49,7 @@ afterAll(async () => {
 });
 
 describe("plan catalogue", () => {
-  it("serves both plans with database prices and the 10 GB quota", async () => {
+  it("serves both plans with database prices and the configured Premium quota", async () => {
     const response = await new Client("catalogue").get<{
       plans: { id: string; interval: string; priceMinor: number; currency: string; storageBytes: number; active: boolean }[];
       currency: string;
@@ -59,7 +60,7 @@ describe("plan catalogue", () => {
     const yearly = response.body.plans.find((plan) => plan.id === "premium_yearly")!;
     expect(monthly.priceMinor).toBe(150_000);
     expect(monthly.currency).toBe("PKR");
-    expect(monthly.storageBytes).toBe(10_000_000_000);
+    expect(monthly.storageBytes).toBe(DEFAULT_PREMIUM_STORAGE_BYTES);
     expect(yearly.priceMinor).toBe(1_500_000);
     expect(yearly.interval).toBe("year");
     expect(response.body.checkout.provider).toBe("safepay");
@@ -88,7 +89,7 @@ describe("verified webhooks activate Premium", () => {
     const after = await client.get<Session>("/api/auth/session");
     expect(after.body.user?.plan).toBe("premium");
     expect(after.body.entitlements.plan).toBe("premium");
-    expect(after.body.entitlements.quotaBytes).toBe(10_000_000_000);
+    expect(after.body.entitlements.quotaBytes).toBe(DEFAULT_PREMIUM_STORAGE_BYTES);
 
     const { rows } = await db.query<{ status: string; current_period_end: Date }>(
       "select status, current_period_end from subscriptions where user_id = $1 order by created_at desc limit 1",
@@ -213,9 +214,9 @@ describe("subscription lifecycle", () => {
 
     const after = await client.get<Session>("/api/auth/session");
     expect(after.body.entitlements.plan).toBe("free");
-    expect(after.body.entitlements.quotaBytes).toBe(2_000_000_000);
+    expect(after.body.entitlements.quotaBytes).toBe(DEFAULT_FREE_STORAGE_BYTES);
 
-    // Files are preserved after the downgrade, only new uploads beyond 2 GB stop.
+    // Files are preserved after the downgrade, only new uploads beyond the Free quota stop.
     const files = await client.get<{ files: { name: string }[] }>("/api/files");
     expect(files.body.files.map((file) => file.name)).toContain("keep-me.pdf");
     const download = await client.get(`/api/files/${(upload.body as { file: { id: string } }).file.id}/download`);
@@ -233,7 +234,7 @@ describe("subscription lifecycle", () => {
 
     const session = await client.get<Session>("/api/auth/session");
     expect(session.body.entitlements.plan).toBe("free");
-    expect(session.body.entitlements.quotaBytes).toBe(2_000_000_000);
+    expect(session.body.entitlements.quotaBytes).toBe(DEFAULT_FREE_STORAGE_BYTES);
     const files = await client.get<{ total: number }>("/api/files");
     expect(files.body.total).toBe(1);
   });

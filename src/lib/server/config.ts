@@ -5,6 +5,7 @@
  * this module may be imported from a client component: the payment keys, the
  * storage signing secret and the mail credentials must never reach the browser.
  */
+import { DEFAULT_FREE_STORAGE_BYTES, DEFAULT_PREMIUM_STORAGE_BYTES } from "../plans";
 
 function str(value: string | undefined, fallback = ""): string {
   return (value ?? fallback).trim();
@@ -90,7 +91,18 @@ export const config = {
     /** HMAC secret for temporary signed download URLs. Falls back to a derived secret. */
     signingSecret: str(process.env.STORAGE_SIGNING_SECRET, str(process.env.AUTH_SECRET, "pdfpro-development-signing-secret")),
     signedUrlTtlSeconds: int(process.env.STORAGE_SIGNED_URL_TTL, 300),
-    maxUploadBytes: int(process.env.STORAGE_MAX_UPLOAD_BYTES, 100 * 1024 * 1024),
+    maxUploadBytes: int(process.env.STORAGE_MAX_UPLOAD_BYTES, 50 * 1024 * 1024),
+  },
+
+  /**
+   * Plan quotas. Defaults fit the free tiers (R2 gives 10 GB of object storage,
+   * Neon 1 GB of Postgres per project); override per deployment with
+   * FREE_PLAN_STORAGE_BYTES / PREMIUM_PLAN_STORAGE_BYTES, or per plan from the
+   * admin dashboard (subscription_plans.storage_bytes).
+   */
+  plans: {
+    freeStorageBytes: int(process.env.FREE_PLAN_STORAGE_BYTES, DEFAULT_FREE_STORAGE_BYTES),
+    premiumStorageBytes: int(process.env.PREMIUM_PLAN_STORAGE_BYTES, DEFAULT_PREMIUM_STORAGE_BYTES),
   },
 
   safepay: {

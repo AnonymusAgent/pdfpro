@@ -102,7 +102,7 @@ test.describe("dashboard, pricing and cloud storage", () => {
     await expect(page.getByRole("heading", { name: /Free vs Premium/i })).toBeVisible();
     await expect(page.getByText("Free", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Premium", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText(/10 GB/i).first()).toBeVisible();
+    await expect(page.getByText(/200 MB/i).first()).toBeVisible();
     await expect(page.getByText(/Monthly/i).first()).toBeVisible();
     await expect(page.getByText(/Yearly/i).first()).toBeVisible();
   });

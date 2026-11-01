@@ -4,6 +4,8 @@ import Link from "next/link";
 import { CloudUpload } from "lucide-react";
 import { CloudFileManager } from "@/components/cloud/file-manager";
 import { PageTitle } from "@/components/ui";
+import { formatBytes, planStorageLabel } from "@/lib/plans";
+import { config } from "@/lib/server/config";
 import { getEntitlements } from "@/lib/server/entitlements";
 import { readSession } from "@/lib/server/session";
 
@@ -23,7 +25,7 @@ export default async function CloudPage() {
           <span>
             Private PDF storage for {session.user.email}.{" "}
             {entitlements.plan === "premium" ? "Premium plan" : "Free plan"} ·{" "}
-            {entitlements.storage.quotaBytes / 1_000_000_000} GB quota.
+            {formatBytes(entitlements.storage.quotaBytes)} quota.
           </span>
         }
         actions={
@@ -32,7 +34,10 @@ export default async function CloudPage() {
           </span>
         }
       />
-      <CloudFileManager initialStorage={entitlements.storage} />
+      <CloudFileManager
+        initialStorage={entitlements.storage}
+        premiumQuotaLabel={planStorageLabel(config.plans.premiumStorageBytes)}
+      />
       <p className="mt-6 text-xs text-slate-500 dark:text-slate-400">
         Looking for the browser-only tools?{" "}
         <Link href="/editor" className="font-semibold underline">Open the editor</Link> — files processed there never leave your device.

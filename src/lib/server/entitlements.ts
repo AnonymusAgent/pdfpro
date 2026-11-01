@@ -8,7 +8,8 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { storageUsage, subscriptionPlans, subscriptions } from "@/db/schema";
-import { buildStorageSnapshot, FREE_STORAGE_BYTES, PREMIUM_STORAGE_BYTES, type StorageSnapshot } from "@/lib/plans";
+import { buildStorageSnapshot, type StorageSnapshot } from "@/lib/plans";
+import { config } from "./config";
 import { getStorageSettings } from "./platform-settings";
 
 export type SubscriptionSummary = {
@@ -78,7 +79,7 @@ function summarize(sub: SubscriptionRow, plan: PlanRow | undefined): Subscriptio
     cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
     graceUntil: sub.graceUntil?.toISOString() ?? null,
     cancelledAt: sub.cancelledAt?.toISOString() ?? null,
-    planStorageBytes: plan?.storageBytes ?? PREMIUM_STORAGE_BYTES,
+    planStorageBytes: plan?.storageBytes || config.plans.premiumStorageBytes,
   };
 }
 
@@ -132,7 +133,7 @@ export async function getEntitlements(
 
   if (granting[0]) {
     const summary = summarize(granting[0].sub, granting[0].plan ?? undefined);
-    const quotaBytes = summary.planStorageBytes || PREMIUM_STORAGE_BYTES;
+    const quotaBytes = summary.planStorageBytes || config.plans.premiumStorageBytes;
     return {
       plan: "premium",
       quotaBytes,
@@ -151,15 +152,17 @@ export async function getEntitlements(
     };
   }
 
+  const freeQuotaBytes = config.plans.freeStorageBytes;
+
   return {
     plan: "free",
-    quotaBytes: FREE_STORAGE_BYTES,
+    quotaBytes: freeQuotaBytes,
     usedBytes,
     fileCount,
     maxUploadBytes,
     storage: buildStorageSnapshot({
       usedBytes,
-      quotaBytes: FREE_STORAGE_BYTES,
+      quotaBytes: freeQuotaBytes,
       fileCount,
       maxUploadBytes,
     }),

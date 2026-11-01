@@ -208,7 +208,7 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   billingMode: text("billing_mode").notNull().default("one_time"),
   provider: text("provider").notNull().default("safepay"),
   providerPlanId: text("provider_plan_id"),
-  storageBytes: bigint("storage_bytes", { mode: "number" }).notNull().default(10_000_000_000),
+  storageBytes: bigint("storage_bytes", { mode: "number" }).notNull().default(2_147_483_648),
   features: jsonb("features").notNull().default([]),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),

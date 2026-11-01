@@ -108,12 +108,12 @@ API returns `502` and changes nothing — it never claims a cancellation it did 
 
 | State       | Meaning                                                              | Premium?                                        |
 | ----------- | -------------------------------------------------------------------- | ----------------------------------------------- |
-| `free`      | No subscription                                                      | No (2 GB)                                       |
+| `free`      | No subscription                                                      | No (Free quota: 200 MB)                         |
 | `pending`   | Checkout created, payment not confirmed                              | No                                              |
-| `active`    | Verified payment; `current_period_end` in the future (or open-ended) | Yes (10 GB)                                     |
+| `active`    | Verified payment; `current_period_end` in the future (or open-ended) | Yes (Premium quota: 2 GB)                       |
 | `past_due`  | Renewal failed, still inside `grace_until`                           | Yes, with a payment warning                     |
 | `cancelled` | Cancelled; access continues until `current_period_end`               | Yes until the term ends                         |
-| `expired`   | Term ended / grace ended                                             | No — files are kept, uploads blocked above 2 GB |
+| `expired`   | Term ended / grace ended                                             | No — files are kept, uploads blocked above the Free quota |
 
 ## 7. Testing without a live merchant account
 

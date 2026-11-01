@@ -38,7 +38,8 @@ npm run admin:grant -- someone@example.com --remove
 
 ## 3. Environment
 
-All variables are documented in `.env.example`. The only ones without which the app cannot
+All variables are documented in `.env.example`; `.env.local.example` is a ready-to-copy
+template with placeholder values for the recommended Neon + Cloudflare R2 stack. The only ones without which the app cannot
 run are `DATABASE_URL` and `AUTH_SECRET`; each optional integration degrades explicitly (the UI
 says what is unavailable and why) rather than failing at request time.
 
@@ -59,22 +60,26 @@ responses and exists only for local development and automated tests.
 keyed `users/<userId>/<fileId>.pdf`. Mount a persistent volume, back it up with the database,
 and keep it out of the container image. Uploads stream to disk; nothing is buffered in memory.
 
-**S3-compatible bucket** (`STORAGE_DRIVER=s3`): works with Neon Object Storage, Cloudflare R2,
-AWS S3, MinIO and Backblaze B2. Create a **private** bucket, then provide credentials — either
-the explicit `S3_*` names or the AWS-standard variables that Neon writes on deploy:
+**S3-compatible bucket** (`STORAGE_DRIVER=s3`, recommended): Cloudflare R2 is the default
+target — 10 GB free, zero egress fees, private bucket, no CORS needed. AWS S3, Neon Object
+Storage, MinIO and Backblaze B2 work through the same driver.
 
 ```bash
 STORAGE_DRIVER=s3
 S3_BUCKET=pdfpro-files
-# Neon Object Storage (endpoint + credentials are injected by `neon deploy`)
-S3_ENDPOINT=https://<region>.aws.neon.tech/storage
-S3_REGION=us-east-2
+# Cloudflare R2
+S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_FORCE_PATH_STYLE=false    # R2 uses virtual-hosted style
 S3_ACCESS_KEY_ID=…
 S3_SECRET_ACCESS_KEY=…
-S3_FORCE_PATH_STYLE=true     # default; required by Neon, R2 and MinIO
+# Neon Object Storage instead: endpoint https://<region>.aws.neon.tech/storage,
+# a real region, and S3_FORCE_PATH_STYLE=true (default) — `neon deploy` writes
+# the AWS_* variables for you.
 ```
 
-Full walkthrough, including the Neon Console path: [`docs/STORAGE_SETUP.md`](STORAGE_SETUP.md).
+Full walkthrough: [`docs/STORAGE_SETUP.md`](STORAGE_SETUP.md). The database itself lives on
+Neon — see [`docs/NEON_SETUP.md`](NEON_SETUP.md).
 Credentials stay server-side; browsers only ever see signed URLs issued by
 `/api/files/{id}/url`.
 
@@ -111,7 +116,7 @@ state tidy and sends notifications).
 ## 7. Reverse proxy
 
 - Terminate TLS, forward `X-Forwarded-Proto`/`X-Forwarded-Host` (used to build absolute URLs).
-- Allow uploads up to `STORAGE_MAX_UPLOAD_BYTES` (default 100 MiB) — set `client_max_body_size`.
+- Allow uploads up to `STORAGE_MAX_UPLOAD_BYTES` (default 50 MiB) — set `client_max_body_size`.
 - Suggested headers:
 
   ```

@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_FREE_STORAGE_BYTES } from "@/lib/plans";
 import {
   BASE_URL,
   Client,
@@ -117,10 +118,10 @@ describe("cloud storage", () => {
     const { client, userId } = await createUser();
     await client.upload(await makePdf("Quota probe"), "probe.pdf");
 
-    // Pretend the account is one kilobyte below its 2 GB limit.
+    // Pretend the account is one kilobyte below its Free-plan limit.
     await db.query("update storage_usage set used_bytes = $2, file_count = 1 where user_id = $1", [
       userId,
-      2_000_000_000 - 1_024,
+      DEFAULT_FREE_STORAGE_BYTES - 1_024,
     ]);
 
     const blocked = await client.upload(await makePdf("Too big"), "blocked.pdf");
@@ -130,7 +131,7 @@ describe("cloud storage", () => {
     const state = await client.get<{ storage: { usedBytes: number; quotaBytes: number; percentUsed: number } }>("/api/files");
     expect(state.body.storage.percentUsed).toBe(100);
     // Nothing was written for the rejected upload.
-    expect(state.body.storage.usedBytes).toBe(2_000_000_000 - 1_024);
+    expect(state.body.storage.usedBytes).toBe(DEFAULT_FREE_STORAGE_BYTES - 1_024);
 
     await db.query("update storage_usage set used_bytes = 0, file_count = 0 where user_id = $1", [userId]);
     const allowed = await client.upload(await makePdf("Fits again"), "allowed.pdf");

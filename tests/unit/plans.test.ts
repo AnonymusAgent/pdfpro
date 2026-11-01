@@ -1,21 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_FREE_STORAGE_BYTES,
+  DEFAULT_PREMIUM_STORAGE_BYTES,
   FREE_STORAGE_BYTES,
   PREMIUM_STORAGE_BYTES,
   buildStorageSnapshot,
   formatBytes,
   formatMoneyMinor,
+  planStorageLabel,
 } from "@/lib/plans";
 
 describe("plan quotas", () => {
-  it("defines the documented 2 GB / 10 GB limits", () => {
-    expect(FREE_STORAGE_BYTES).toBe(2_000_000_000);
-    expect(PREMIUM_STORAGE_BYTES).toBe(10_000_000_000);
+  it("sizes the default quotas for the free storage tier (200 MB / 2 GB)", () => {
+    // Cloudflare R2 gives 10 GB of object storage for free, so the smallest
+    // sensible quotas are used by default and can be raised in the admin UI.
+    expect(DEFAULT_FREE_STORAGE_BYTES).toBe(200 * 1024 * 1024);
+    expect(DEFAULT_PREMIUM_STORAGE_BYTES).toBe(2 * 1024 * 1024 * 1024);
+    expect(FREE_STORAGE_BYTES).toBe(DEFAULT_FREE_STORAGE_BYTES);
+    expect(PREMIUM_STORAGE_BYTES).toBe(DEFAULT_PREMIUM_STORAGE_BYTES);
+    expect(PREMIUM_STORAGE_BYTES).toBeGreaterThan(FREE_STORAGE_BYTES);
   });
 
   it("reports remaining capacity and percentage", () => {
-    const snapshot = buildStorageSnapshot({ usedBytes: 500_000_000, quotaBytes: FREE_STORAGE_BYTES, fileCount: 3 });
-    expect(snapshot.remainingBytes).toBe(1_500_000_000);
+    const snapshot = buildStorageSnapshot({ usedBytes: 50 * 1024 * 1024, quotaBytes: FREE_STORAGE_BYTES, fileCount: 3 });
+    expect(snapshot.remainingBytes).toBe(150 * 1024 * 1024);
     expect(snapshot.percentUsed).toBe(25);
     expect(snapshot.overQuota).toBe(false);
     expect(snapshot.uploadsBlocked).toBe(false);
@@ -28,7 +36,7 @@ describe("plan quotas", () => {
     expect(atLimit.uploadsBlocked).toBe(true);
     expect(atLimit.uploadsBlockedReason).toMatch(/at or above your plan limit/i);
 
-    const overAfterDowngrade = buildStorageSnapshot({ usedBytes: 6_000_000_000, quotaBytes: FREE_STORAGE_BYTES });
+    const overAfterDowngrade = buildStorageSnapshot({ usedBytes: 6 * 1024 * 1024 * 1024, quotaBytes: FREE_STORAGE_BYTES });
     expect(overAfterDowngrade.overQuota).toBe(true);
     expect(overAfterDowngrade.remainingBytes).toBe(0);
     expect(overAfterDowngrade.percentUsed).toBe(100);
@@ -47,6 +55,8 @@ describe("formatting", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2_000_000_000)).toBe("1.9 GB");
     expect(formatBytes(10_000_000_000)).toBe("9.3 GB");
+    expect(planStorageLabel(DEFAULT_FREE_STORAGE_BYTES)).toBe("200 MB");
+    expect(planStorageLabel(DEFAULT_PREMIUM_STORAGE_BYTES)).toBe("2 GB");
   });
 
   it("formats money from minor units", () => {
