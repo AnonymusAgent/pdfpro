@@ -24,7 +24,7 @@ if (!email) {
   process.exit(1);
 }
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL || process.env.DATABASE_URL_POOLED;
 if (!connectionString) {
   console.error("DATABASE_URL is required.");
   process.exit(1);

@@ -100,12 +100,6 @@ function AccountMenu() {
         >
           Sign in
         </Link>
-        <Link
-          href="/register"
-          className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[13px] font-semibold text-white hover:bg-blue-500"
-        >
-          Create account
-        </Link>
       </div>
     );
   }

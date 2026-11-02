@@ -4,9 +4,9 @@ import { defineConfig, devices } from "@playwright/test";
  * End-to-end tests run against the production build (`npm run build`), served on a dedicated port
  * so they never interfere with the preview server or a developer's `next dev` session.
  *
- * The SaaS suite registers its own accounts, so the server runs with the console
- * mail transport and dev verification links enabled. Point DATABASE_URL at a
- * disposable database — the suite creates verified users and uploads files.
+ * The SaaS suite seeds its own accounts in a disposable database. The server
+ * runs with the console mail transport and dev verification links enabled.
+ * Never point DATABASE_URL at production: the suite creates users and files.
  */
 const PORT = 3100;
 

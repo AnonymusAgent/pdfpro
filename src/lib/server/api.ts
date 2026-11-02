@@ -28,6 +28,20 @@ export function errorResponse(error: unknown): Response {
     );
   }
   console.error("[api] unhandled error", error);
+  // Keep connection details and SQL out of the browser, but make a missing or
+  // unreachable database distinguishable from bad credentials or validation.
+  let cause: unknown = error;
+  for (let depth = 0; depth < 5 && cause; depth += 1) {
+    if (typeof cause !== "object") break;
+    const code = (cause as { code?: unknown }).code;
+    if (["42P01", "3D000", "28P01", "ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"].includes(String(code))) {
+      return Response.json(
+        { error: "Account service is temporarily unavailable. Please contact the site administrator.", code: "database_unavailable" },
+        { status: 503 },
+      );
+    }
+    cause = (cause as { cause?: unknown }).cause;
+  }
   return Response.json({ error: "Something went wrong. Please try again.", code: "internal_error" }, { status: 500 });
 }
 

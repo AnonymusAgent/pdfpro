@@ -60,11 +60,36 @@ afterAll(async () => {
 });
 
 describe("admin authorisation", () => {
+  it("lets only an administrator create a user without logging in as that user", async () => {
+    const admin = await createAdmin();
+    const email = "IT+" + Math.random().toString(36).slice(2) + "@example.test";
+    const bad = await admin.client.post("/api/admin/users", { email, password: "short" });
+    expect(bad.status).toBe(400);
+    expect((bad.body as { code: string }).code).toBe("weak_password");
+
+    const created = await admin.client.post<{ id: string; email: string; previewUrl?: string }>("/api/admin/users", {
+      email, password: "Managed-Pass123", displayName: "Managed Tester",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.email).toBe(email.toLowerCase());
+    const duplicate = await admin.client.post("/api/admin/users", { email, password: "Managed-Pass123" });
+    expect(duplicate.status).toBe(409);
+    const adminSession = await admin.client.get<{ user: { id: string } }>("/api/auth/session");
+    expect(adminSession.body.user.id).toBe(admin.userId);
+    const newUser = new Client("managed");
+    expect((await newUser.post("/api/auth/login", { email, password: "Managed-Pass123" })).status).toBe(200);
+    const newSession = await newUser.get<{ user: { id: string; isAdmin: boolean; emailVerified: boolean } }>("/api/auth/session");
+    expect(newSession.body.user.id).toBe(created.body.id);
+    expect(newSession.body.user.isAdmin).toBe(false);
+    expect(newSession.body.user.emailVerified).toBe(false);
+  });
+
   it("rejects anonymous and non-admin callers on every admin route", async () => {
     const { client } = await createUser();
     const routes = [
       ["GET", "/api/admin/stats"],
       ["GET", "/api/admin/users"],
+      ["POST", "/api/admin/users"],
       ["GET", "/api/admin/subscriptions"],
       ["GET", "/api/admin/payments"],
       ["GET", "/api/admin/outbox"],

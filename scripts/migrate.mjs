@@ -22,7 +22,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(here, "..", "drizzle");
 const statusOnly = process.argv.includes("--status");
 
-const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+const connectionString = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL || process.env.DATABASE_URL_POOLED || process.env.POSTGRES_URL;
 if (!connectionString) {
   console.error("DATABASE_URL is required (see .env.example).");
   process.exit(1);

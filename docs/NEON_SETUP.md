@@ -35,6 +35,13 @@ DATABASE_URL=postgresql://pdfpro_app:<password>@ep-xxxx-pooler.us-east-2.aws.neo
 PG_POOL_MAX=6                 # Neon free plan has tight connection limits; keep the pool small
 ```
 
+On Vercel, Neon can inject separate `DATABASE_URL_POOLED` and
+`DATABASE_URL_UNPOOLED` values. The app prefers the pooled URL for request traffic;
+`DATABASE_URL` is still supported, and the unpooled URL is the last-resort runtime
+fallback. The migration runner prefers the unpooled URL. Check the **production**
+environment and run migrations on that same database before provisioning an admin;
+a successful Vercel build alone does not prove the tables exist.
+
 `.env.local.example` contains exactly this block with dummy values. Never commit the real
 `.env.local` (it is git-ignored).
 

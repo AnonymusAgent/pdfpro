@@ -104,10 +104,10 @@ export default async function PricingPage() {
               </Link>
             ) : (
               <Link
-                href="/register"
+                href="/login?next=/pricing"
                 className="flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               >
-                Create a free account
+                Sign in to use Free
               </Link>
             )}
           </div>

@@ -3,6 +3,9 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { errorResponse, HttpError, readJson, assertSameOrigin } from "@/lib/server/api";
 import { requireAdmin } from "@/lib/server/session";
+import { createManagedUser } from "@/lib/server/auth";
+import { clientIp, hashIp } from "@/lib/server/api";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +81,27 @@ export async function GET(request: Request) {
           : null,
       })),
     });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/** Only a signed-in administrator may provision another account. */
+export async function POST(request: Request) {
+  try {
+    assertSameOrigin(request);
+    const actor = await requireAdmin();
+    await enforceRateLimit(`admin:create:${actor.user.id}:${hashIp(clientIp(request))}`, 20, 3600);
+    const body = await readJson<{ email?: string; password?: string; displayName?: string }>(request);
+    const result = await createManagedUser({
+      email: String(body.email ?? ""),
+      password: String(body.password ?? ""),
+      displayName: body.displayName ? String(body.displayName) : undefined,
+      actorId: actor.user.id,
+      actorEmail: actor.user.email,
+      request,
+    });
+    return NextResponse.json({ ok: true, ...result }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }

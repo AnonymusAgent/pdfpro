@@ -19,11 +19,11 @@ never break waiting for Cloudflare.
 | Route | Method | Behaviour when configured |
 |---|---|---|
 | `POST /api/auth/login` | sign in | token required, verified server-side |
-| `POST /api/auth/register` | create account | token required, verified server-side |
+| `POST /api/auth/register` | public registration closed | always `403 registration_closed`; no widget needed |
 | `POST /api/auth/forgot-password` | reset request | token required, verified server-side |
 | `POST /api/auth/reset-password` | choose new password | token required, verified server-side |
 
-Google sign-in, email verification links and every authenticated route are unaffected.
+Turnstile does not gate Google sign-in or email-verification links. Google can only sign in existing non-admin accounts; it cannot create an account or authenticate an administrator.
 
 ### Create the widget
 

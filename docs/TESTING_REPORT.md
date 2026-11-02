@@ -11,9 +11,22 @@ claimed without a run. Commands are reproducible from a clean checkout.
 | Lint (new code)   | `npx eslint src/components/{auth,ads,billing,cloud,account,admin} src/lib/server src/app/api tests scripts` | **0 errors, 0 warnings**                                                                                                                                                                                                           |
 | Lint (whole repo) | `npx eslint .`                                                                                              | 0 errors in this work; 13 pre-existing errors remain in `EditorWorkspace.tsx`, `PageView.tsx`, `OcrWorkspace.tsx` (refs read during render / setState in effect) — untouched legacy editor code                                    |
 | Production build  | `npm run build`                                                                                             | **success**, 41 routes compiled (all SaaS routes dynamic `ƒ`)                                                                                                                                                                      |
-| Unit tests        | `npm run test:unit`                                                                                         | **98 passed / 98** in 12 files                                                                                                                                                                                                     |
-| Integration tests | `npm run build && npm run test:integration`                                                                 | **44 passed / 44** in 4 files, ~7 s                                                                                                                                                                                                |
+| Unit tests        | `npm run test:unit`                                                                                         | **101 passed / 101** in 13 files                                                                                                                                                                                                     |
+| Integration tests | `npm run build && npm run test:integration`                                                                 | **45 passed / 45** in 4 files, ~7 s                                                                                                                                                                                                |
 | Browser e2e       | `npm run test:e2e`                                                                                          | **not executed here**: `npx playwright install chromium` fails in this sandbox (download blocked, no system Chrome). The 21 specs collect successfully (`npx playwright test --list`) and run in CI/local with browsers installed. |
+
+### Administrator-only provisioning (verified on 2026-11-02)
+
+The public registration endpoint now returns `403 registration_closed` without touching the
+DB. New Google accounts are rejected, while existing non-admin Google accounts may still sign
+in; admins use password sign-in only. `POST /api/admin/users` checks the server-side role,
+origin and rate limit, writes the user/profile/storage/audit records, sends a verification
+link and does not create a session for that user. The admin's Account settings → Profile has
+an Add a user form. Typecheck, production build, 101 unit tests and 45 integration tests pass
+with a fresh migrated local DB. Browser e2e has not run in this environment.
+
+The live database and actual administrator account were **not** provisioned from this sandbox;
+use `docs/DEPLOYMENT.md` after verifying production Neon connectivity and migrations.
 
 ### Free-tier quota profile (verified on 2026-11-02)
 
@@ -40,7 +53,7 @@ enabled and disabled paths were exercised.
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Disabled by default | full suites with no Turnstile keys | 98 unit + 44 integration tests pass; no widget rendered, no server check |
+| Disabled by default | full suites with no Turnstile keys | 101 unit + 45 integration tests pass; no widget rendered, no server check |
 | Enabled build | `npm run build` with the Cloudflare test keys | compiles clean, route `ƒ /.well-known/cf-custom-hostname-challenge/[token]` registered |
 | Widget rendered | `curl /login` | “Protected by Cloudflare Turnstile” + site key in the HTML, widget container present |
 | Meta tag | `curl /login` | `<meta name="cf-verification" content="cf-verify-smoke-token"/>` |
@@ -59,6 +72,7 @@ has no outbound TLS to `challenges.cloudflare.com`.
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `plans.test.ts`           | default 200 MB / 2 GB quota constants (free-tier sizing) + label formatting, remaining/percent maths, over-quota blocking without deleting files, negative-usage guard, byte and money formatting                                                                                                                                                                                 |
 | `turnstile.test.ts`       | Cloudflare Turnstile: no-op without keys, token required when configured, `siteverify` request shape (secret/token/IP), rejection with Cloudflare's error codes, hostname mismatch, fail-closed on 5xx/timeout/network error, host normalisation |
+| `api-errors.test.ts`     | Missing database table becomes safe `503 database_unavailable`; intentional validation errors stay intact; unknown failures remain generic |
 | `security.test.ts`        | scrypt hash/verify, per-hash salt, malformed hash rejection, HMAC-SHA256/512, constant-time compare, token hashing, email/password policy, text sanitising, file-name traversal (`../../etc/passwd` → `passwd.pdf`)                                                                                                          |
 | `payments.test.ts`        | Safepay webhook HMAC-SHA512 accept/reject (tampering, wrong secret, missing header), redirect signature (HMAC-SHA256 over tracker), month/year period arithmetic, the exact Premium access rule for `active`/`pending`/`expired`/`past_due`+grace/`cancelled`, signed download tokens (foreign file, forged payload, expiry) |
 | plus 7 pre-existing files | geometry, layout, export, operations, conversions, validation, OCR helpers — 53 tests; fixtures are now generated by `npm run fixtures`                                                                                                                                                                                      |
@@ -71,11 +85,11 @@ setup/verification.
 
 ### Authentication and sessions (14 tests)
 
-- Weak password → `400 weak_password`; malformed email → `400 invalid_email`; duplicate registration → `409 email_taken`.
+- Public signup → `403 registration_closed`; admin-managed creation rejects weak passwords (`400 weak_password`) and duplicate emails (`409 email_taken`).
 - Protected pages (`/dashboard`, `/cloud`, `/account`, `/admin`) redirect to `/login?next=…` without a session.
 - Unverified accounts are blocked from uploads (`403 email_unverified`) and checkout (`403`).
 - Verification token is single-use: replaying it for a verified account reports `alreadyVerified` and changes nothing; an unknown token is `400 invalid_token`.
-- New account starts Free with `quotaBytes = 2,000,000,000`, `usedBytes = 0`.
+- New account starts Free with `quotaBytes = 209,715,200`, `usedBytes = 0`.
 - Wrong password → `401 invalid_credentials`; correct password sets `pdfpro_session`; logout invalidates it (subsequent `/api/files` → `401`).
 - Two devices sign in independently; revoking one leaves the other working; "sign out other devices" semantics verified.
 - Password change with the current password revokes other devices, keeps this one, and the old password no longer signs in.
@@ -111,7 +125,7 @@ setup/verification.
 - Payment history is visible to the owner in `/api/account`.
 - Maintenance endpoint requires the cron secret or an administrator.
 
-### Administration (9 tests)
+### Administration (10 tests)
 
 - All admin routes return `401` anonymously and `403` for a normal user.
 - Granting the `admin_roles` row enables `/api/admin/stats`; revoking it disables access again.
@@ -127,7 +141,7 @@ setup/verification.
 
 1. **Cross-account access on `/api/billing/verify-return`** — the endpoint looked a payment up by id without scoping to the caller, so a payment UUID from another account returned status information. Fixed: ownership is part of the query (`id = $1 and user_id = $2`), and the admin `force_verify` action resolves the owner explicitly. Regression test: _"never activates Premium from the return URL alone"_.
 2. **Pool deadlock on upload** — `uploadPdfFile` called `getEntitlements()` (a second pooled connection) while holding `select … for update` on `storage_usage`. Under load the pool could exhaust and the request hung until the connection timeout, then returned 500. Fixed: `getEntitlements(userId, executor, maxUploadBytes)` accepts the transaction handle, so the whole critical section uses one connection; also added `PG_POOL_MAX`, idle and connect timeouts.
-3. **Duplicate registration returned 500** — Drizzle wraps driver errors, so the SQLSTATE `23505` lived on `error.cause`. Fixed: `isUniqueViolation` walks the cause chain. Now `409 email_taken`.
+3. **Duplicate accounts historically returned 500** — Drizzle wraps driver errors, so the SQLSTATE `23505` lived on `error.cause`. Fixed: `isUniqueViolation` walks the cause chain. Now `409 email_taken`.
 4. **Provider outage turned the return page into a 500** — `verifyCheckoutReturn` propagated a network error. Fixed: returns `status: "pending"` with an honest message and never activates anything.
 5. **Seeded prices were 100× too low** — `1500`/`15000` minor units rendered as Rs 15 / Rs 150. Corrected to `150000` / `1500000` (Rs 1,500 / Rs 15,000) in the migration.
 6. **Verification links were reusable** — the handler verified unverified accounts again with a consumed token. Fixed: a consumed token now errors (`token_used`) unless the account is already verified, in which case it is reported idempotently.
@@ -136,7 +150,7 @@ setup/verification.
 ## 5. Browser e2e (`tests/e2e/saas.spec.ts`, 12 new specs)
 
 Written and collected but **not executed in this sandbox** (no Chromium available). They cover:
-redirect-to-login for protected pages, register → verify → dashboard, sign-in/sign-out,
+redirect-to-login for protected pages, closed signup, operator-seeded user sign-in/sign-out,
 password reset via the UI, pricing comparison, dashboard cards, upload → rename → download →
 delete in the cloud manager, search persisting across reload, profile update and device list,
 billing tab, the non-admin `/admin` notice, and "no AdSense markup when unconfigured".
@@ -153,7 +167,7 @@ npm run test:e2e
 
 | #   | Requirement                                       | Evidence                                                                                                                                |
 | --- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Free user can register and verify                 | auth suite: register/verify, `EMAIL_EXPOSE_DEV_LINKS` link                                                                              |
+| 1   | Admin can provision user; user verifies                 | auth/admin suites: managed creation/verify, `AUTH_EXPOSE_DEV_LINKS` link                                                                              |
 | 2   | Free user cannot exceed the Free quota             | storage: "enforces the storage quota server-side" (200 MB by default)                                                                   |
 | 3   | Premium quota is larger than Free                 | billing: quota becomes the plan's `2,147,483,648` bytes after activation                                                                |
 | 4   | Files are private between users                   | storage: "keeps every account's files private"                                                                                          |

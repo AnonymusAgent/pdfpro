@@ -36,6 +36,8 @@ function isTurnstileError(code?: string): boolean {
 
 const OAUTH_ERRORS: Record<string, string> = {
   google_unavailable: "Google sign-in is not configured on this deployment.",
+  registration_closed: "Accounts are created by an administrator. Ask your administrator for access.",
+  admin_password_required: "Administrators must sign in with email and password.",
   google_failed: "Google sign-in could not be completed. Please try again.",
   google_cancelled: "Google sign-in was cancelled.",
   oauth_state_missing: "Your sign-in session expired. Please try again.",
@@ -96,20 +98,8 @@ export function LoginForm({
   return (
     <AuthShell
       title="Sign in"
-      subtitle="Use the email address you registered with."
-      footer={
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-slate-600 dark:text-slate-400">
-            New here?{" "}
-            <Link href="/register" className="font-semibold text-blue-700 hover:underline dark:text-blue-300">
-              Create an account
-            </Link>
-          </span>
-          <Link href="/forgot-password" className="font-semibold text-slate-600 hover:underline dark:text-slate-300">
-            Forgot password?
-          </Link>
-        </div>
-      }
+      subtitle="Use the email address provided by your administrator."
+      footer={<Link href="/forgot-password" className="font-semibold text-blue-700 hover:underline dark:text-blue-300">Forgot password?</Link>}
     >
       <form onSubmit={submit} className="space-y-4" noValidate>
         <FormError message={error} />
@@ -147,158 +137,14 @@ export function LoginForm({
           Sign in
         </button>
       </form>
-      <div className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /> or <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-      </div>
-      <GoogleButton enabled={googleEnabled} next={next} />
-    </AuthShell>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Registration                                                        */
-/* ------------------------------------------------------------------ */
-
-export function RegisterForm({ googleEnabled, turnstileSiteKey = "" }: { googleEnabled: boolean; turnstileSiteKey?: string }) {
-  const router = useRouter();
-  const { setSession } = useSession();
-  const [form, setForm] = useState({ displayName: "", email: "", password: "", confirm: "", marketing: false });
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [captchaEpoch, setCaptchaEpoch] = useState(0);
-
-  const update = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    if (form.password !== form.confirm) {
-      setError("The two passwords do not match.");
-      return;
-    }
-    if (form.password.length < MIN_PASSWORD) {
-      setError(`Use at least ${MIN_PASSWORD} characters with at least one letter and one number.`);
-      return;
-    }
-    setBusy(true);
-    try {
-      const { ok, data } = await postJson<SessionPayload & { previewUrl?: string; verificationSent?: boolean }>("/api/auth/register", {
-        email: form.email,
-        password: form.password,
-        displayName: form.displayName,
-        marketingOptIn: form.marketing,
-        turnstileToken: captcha ?? undefined,
-      });
-      if (!ok) {
-        setError(data.error ?? "Could not create your account.");
-        if (isTurnstileError(data.code)) setCaptchaEpoch((value) => value + 1);
-        return;
-      }
-      setSession(data);
-      const query = new URLSearchParams({ welcome: "1" });
-      if (data.previewUrl) query.set("preview", data.previewUrl);
-      router.push(`/dashboard?${query.toString()}`);
-      router.refresh();
-    } catch {
-      setError("Network error. Check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <AuthShell
-      title="Create your account"
-      subtitle="Free forever with private cloud storage."
-      footer={
-        <span className="text-slate-600 dark:text-slate-400">
-          Already have an account?{" "}
-          <Link href="/login" className="font-semibold text-blue-700 hover:underline dark:text-blue-300">
-            Sign in
-          </Link>
-        </span>
-      }
-    >
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <FormError message={error} />
-        <div>
-          <label className={labelCls} htmlFor="register-name">Name <span className="font-normal text-slate-400">(optional)</span></label>
-          <input
-            id="register-name"
-            className={inputCls}
-            autoComplete="name"
-            maxLength={80}
-            value={form.displayName}
-            onChange={(event) => update({ displayName: event.target.value })}
-          />
-        </div>
-        <div>
-          <label className={labelCls} htmlFor="register-email">Email address</label>
-          <input
-            id="register-email"
-            className={inputCls}
-            type="email"
-            autoComplete="email"
-            required
-            value={form.email}
-            onChange={(event) => update({ email: event.target.value })}
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className={labelCls} htmlFor="register-password">Password</label>
-            <input
-              id="register-password"
-              className={inputCls}
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={MIN_PASSWORD}
-              value={form.password}
-              onChange={(event) => update({ password: event.target.value })}
-            />
+      {googleEnabled && !next.startsWith("/admin") && (
+        <>
+          <div className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /> or <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
           </div>
-          <div>
-            <label className={labelCls} htmlFor="register-confirm">Confirm password</label>
-            <input
-              id="register-confirm"
-              className={inputCls}
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={MIN_PASSWORD}
-              value={form.confirm}
-              onChange={(event) => update({ confirm: event.target.value })}
-            />
-          </div>
-        </div>
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-          At least {MIN_PASSWORD} characters, with a letter and a number. We send a verification email after sign-up.
-        </p>
-        <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <input
-            type="checkbox"
-            className="mt-0.5"
-            checked={form.marketing}
-            onChange={(event) => update({ marketing: event.target.checked })}
-          />
-          <span>Send me occasional product updates. You can turn this off at any time.</span>
-        </label>
-        <Turnstile siteKey={turnstileSiteKey} onToken={setCaptcha} resetKey={captchaEpoch} />
-        <button
-          type="submit"
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-        >
-          {busy && <Loader2 size={15} className="animate-spin" aria-hidden />}
-          Create free account
-        </button>
-      </form>
-      <div className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" /> or <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-      </div>
-      <GoogleButton enabled={googleEnabled} next="/dashboard" />
+          <GoogleButton enabled next={next} />
+        </>
+      )}
     </AuthShell>
   );
 }

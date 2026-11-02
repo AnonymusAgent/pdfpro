@@ -4,7 +4,7 @@
  * The client keeps its own cookie jar and always sends an Origin header, since
  * every mutating API route enforces same-origin requests.
  */
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, scryptSync } from "node:crypto";
 import { Pool } from "pg";
 import { PDFDocument, StandardFonts, rgb } from "@cantoo/pdf-lib";
 
@@ -128,8 +128,8 @@ export function uniqueEmail(prefix = "it"): string {
 
 export const PASSWORD = "Integration-Pass1";
 
-/** Registers and verifies a user, returning the authenticated client. */
-export async function createUser(options: { password?: string; displayName?: string } = {}): Promise<{
+/** Seed a verified test account as a trusted operator; public registration is closed. */
+export async function createUser(options: { password?: string; displayName?: string; verified?: boolean } = {}): Promise<{
   client: Client;
   email: string;
   password: string;
@@ -137,18 +137,19 @@ export async function createUser(options: { password?: string; displayName?: str
 }> {
   const email = uniqueEmail();
   const password = options.password ?? PASSWORD;
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 128 * 16384 * 8 * 2 });
+  const passwordHash = `scrypt$16384$8$1$${salt.toString("base64url")}$${hash.toString("base64url")}`;
+  const { rows } = await db.query<{ id: string }>(
+    "insert into users (email, email_normalized, password_hash, email_verified_at, display_name) values ($1, $1, $2, $3, $4) returning id",
+    [email, passwordHash, options.verified === false ? null : new Date(), options.displayName ?? "Integration Tester"],
+  );
+  const userId = rows[0]!.id;
+  await db.query("insert into profiles (user_id, full_name) values ($1, $2)", [userId, options.displayName ?? "Integration Tester"]);
+  await db.query("insert into storage_usage (user_id) values ($1)", [userId]);
   const client = new Client(email);
-  const registered = await client.post<{ ok: boolean; previewUrl?: string; user: { id: string } }>("/api/auth/register", {
-    email,
-    password,
-    displayName: options.displayName ?? "Integration Tester",
-  });
-  if (registered.status !== 201) throw new HttpError(registered.status, registered.body, "register");
-  const userId = registered.body.user.id;
-  const token = extractToken(registered.body.previewUrl);
-  if (!token) throw new Error("Registration did not expose a verification link; set AUTH_EXPOSE_DEV_LINKS=true.");
-  const verified = await client.post("/api/auth/verify-email", { token });
-  if (verified.status !== 200) throw new HttpError(verified.status, verified.body, "verify-email");
+  const login = await client.post("/api/auth/login", { email, password });
+  if (login.status !== 200) throw new HttpError(login.status, login.body, "login");
   return { client, email, password, userId };
 }
 
