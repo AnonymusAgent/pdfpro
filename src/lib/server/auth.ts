@@ -1,5 +1,5 @@
 /**
- * Account lifecycle: registration, verification, login, password reset and
+ * Account lifecycle: administrator provisioning, verification, login, password reset and
  * Google sign-in.
  *
  * All password and token handling happens here on the server. The browser only
@@ -7,7 +7,7 @@
  */
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { emailTokens, oauthAccounts, profiles, storageUsage, users } from "@/db/schema";
+import { adminRoles, auditLog, emailTokens, oauthAccounts, profiles, storageUsage, users } from "@/db/schema";
 import { config, resolveAppUrl } from "./config";
 import { HttpError } from "./api";
 import {
@@ -64,21 +64,6 @@ export type PublicUser = {
   createdAt: string;
 };
 
-export type RegisterInput = {
-  email: string;
-  password: string;
-  displayName?: string;
-  marketingOptIn?: boolean;
-  request: Request;
-};
-
-export type RegisterResult = {
-  user: PublicUser;
-  verificationPreviewUrl?: string;
-  emailDelivered: boolean;
-  emailTransport: string;
-};
-
 /**
  * Drizzle wraps driver errors (DrizzleQueryError), so the PostgreSQL SQLSTATE
  * can live on the error itself or anywhere down the `cause` chain.
@@ -122,53 +107,46 @@ async function sendVerification(userId: string, email: string, displayName: stri
   return { url, delivered: result.delivered, transport: result.transport };
 }
 
-export async function registerUser(input: RegisterInput): Promise<RegisterResult> {
+/** Administrator-only provisioning. Never creates a session for the new user. */
+export async function createManagedUser(input: {
+  email: string;
+  password: string;
+  displayName?: string;
+  actorId: string;
+  actorEmail: string;
+  request: Request;
+}): Promise<{ id: string; email: string; emailDelivered: boolean; emailTransport: string; previewUrl?: string }> {
   const email = normalizeEmail(input.email ?? "");
   if (!isValidEmail(email)) throw new HttpError(400, "Enter a valid email address.", "invalid_email");
   const passwordError = validatePassword(input.password ?? "", email);
   if (passwordError) throw new HttpError(400, passwordError, "weak_password");
-
   const displayName = sanitizeText(input.displayName, 80) || null;
   const passwordHash = await hashPassword(input.password);
-
-  let userId: string;
+  let id: string;
   try {
-    userId = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(users)
-        .values({ email, emailNormalized: email, passwordHash, displayName })
+    id = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(users).values({ email, emailNormalized: email, passwordHash, displayName })
         .returning({ id: users.id });
-      const id = row!.id;
-      await tx.insert(profiles).values({
-        userId: id,
-        fullName: displayName,
-        marketingOptIn: Boolean(input.marketingOptIn),
+      const userId = row!.id;
+      await tx.insert(profiles).values({ userId, fullName: displayName });
+      await tx.insert(storageUsage).values({ userId });
+      await tx.insert(auditLog).values({
+        actorUserId: input.actorId, actorEmail: input.actorEmail,
+        action: "user.create", targetType: "user", targetId: userId,
+        metadata: { email },
       });
-      await tx.insert(storageUsage).values({ userId: id });
-      return id;
+      return userId;
     });
   } catch (error) {
-    if (isUniqueViolation(error)) {
-      throw new HttpError(409, "An account already exists for this email address.", "email_taken");
-    }
+    if (isUniqueViolation(error)) throw new HttpError(409, "An account already exists for this email address.", "email_taken");
     throw error;
   }
-
-  await createSession(userId, input.request);
-  const verification = await sendVerification(userId, email, displayName, input.request);
-
+  // If mail is unavailable the account still exists; the admin can inspect the
+  // outbox and the user can request a new verification email after signing in.
+  const verification = await sendVerification(id, email, displayName, input.request);
   return {
-    user: {
-      id: userId,
-      email,
-      emailVerified: false,
-      displayName,
-      createdAt: new Date().toISOString(),
-    },
-    verificationPreviewUrl:
-      config.auth.exposeDevLinks && verification.transport === "console" ? verification.url : undefined,
-    emailDelivered: verification.delivered,
-    emailTransport: verification.transport,
+    id, email, emailDelivered: verification.delivered, emailTransport: verification.transport,
+    previewUrl: config.auth.exposeDevLinks && verification.transport === "console" ? verification.url : undefined,
   };
 }
 
@@ -385,6 +363,12 @@ export async function exchangeGoogleCode(params: {
   return profile;
 }
 
+async function isAdminGoogleAccount(userId: string, email: string): Promise<boolean> {
+  if (config.admin.emails.includes(email)) return true;
+  const [role] = await db.select({ userId: adminRoles.userId }).from(adminRoles).where(eq(adminRoles.userId, userId)).limit(1);
+  return Boolean(role);
+}
+
 export async function signInWithGoogle(params: {
   profile: GoogleProfile;
   request: Request;
@@ -401,6 +385,7 @@ export async function signInWithGoogle(params: {
     const [user] = await db.select().from(users).where(eq(users.id, link.userId)).limit(1);
     if (!user) throw new HttpError(400, "This Google account is no longer linked. Please sign up again.", "oauth_orphan");
     if (user.accountStatus !== "active") throw new HttpError(403, "This account is suspended.", "account_suspended");
+    if (await isAdminGoogleAccount(user.id, email)) throw new HttpError(403, "Administrators must sign in with email and password.", "admin_password_required");
     await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
     await applyAdminBootstrap(user);
     await createSession(user.id, params.request);
@@ -409,6 +394,7 @@ export async function signInWithGoogle(params: {
 
   const [existing] = await db.select().from(users).where(eq(users.emailNormalized, email)).limit(1);
   if (existing) {
+    if (await isAdminGoogleAccount(existing.id, email)) throw new HttpError(403, "Administrators must sign in with email and password.", "admin_password_required");
     if (existing.accountStatus !== "active") throw new HttpError(403, "This account is suspended.", "account_suspended");
     await db.transaction(async (tx) => {
       await tx
@@ -429,28 +415,5 @@ export async function signInWithGoogle(params: {
     return { userId: existing.id, created: false };
   }
 
-  const displayName = sanitizeText(params.profile.name, 80) || null;
-  const userId = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(users)
-      .values({
-        email,
-        emailNormalized: email,
-        emailVerifiedAt: new Date(),
-        displayName,
-        avatarUrl: params.profile.picture ?? null,
-        lastLoginAt: new Date(),
-      })
-      .returning({ id: users.id });
-    const id = row!.id;
-    await tx.insert(profiles).values({ userId: id, fullName: displayName });
-    await tx.insert(storageUsage).values({ userId: id });
-    await tx.insert(oauthAccounts).values({ userId: id, provider: "google", providerAccountId: params.profile.sub });
-    return id;
-  });
-
-  const [created] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  if (created) await applyAdminBootstrap(created);
-  await createSession(userId, params.request);
-  return { userId, created: true };
+  throw new HttpError(403, "Accounts are created by an administrator. Ask your administrator for access.", "registration_closed");
 }

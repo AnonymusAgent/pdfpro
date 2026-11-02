@@ -23,22 +23,13 @@ afterAll(async () => {
 });
 
 describe("registration and email verification", () => {
-  it("rejects weak passwords, malformed emails and duplicates", async () => {
-    const client = new Client("validation");
-    const weak = await client.post("/api/auth/register", { email: uniqueEmail(), password: "short" });
-    expect(weak.status).toBe(400);
-    expect((weak.body as { code: string }).code).toBe("weak_password");
-
-    const badEmail = await client.post("/api/auth/register", { email: "not-an-email", password: PASSWORD });
-    expect(badEmail.status).toBe(400);
-    expect((badEmail.body as { code: string }).code).toBe("invalid_email");
-
+  it("closes public registration without touching the database", async () => {
     const email = uniqueEmail();
-    const first = await client.post<{ ok: boolean; previewUrl: string }>("/api/auth/register", { email, password: PASSWORD });
-    expect(first.status).toBe(201);
-    const duplicate = await new Client("dup").post("/api/auth/register", { email, password: PASSWORD });
-    expect(duplicate.status).toBe(409);
-    expect((duplicate.body as { code: string }).code).toBe("email_taken");
+    const response = await new Client("visitor").post("/api/auth/register", { email, password: PASSWORD });
+    expect(response.status).toBe(403);
+    expect((response.body as { code: string }).code).toBe("registration_closed");
+    const { rows } = await db.query("select id from users where email_normalized = $1", [email]);
+    expect(rows).toHaveLength(0);
   });
 
   it("serves every page that needs auth without a session", async () => {
@@ -50,13 +41,9 @@ describe("registration and email verification", () => {
   });
 
   it("blocks unverified accounts from uploading or paying", async () => {
-    const client = new Client("unverified");
-    const registered = await client.post<{ ok: boolean; user: { emailVerified: boolean } }>("/api/auth/register", {
-      email: uniqueEmail(),
-      password: PASSWORD,
-    });
-    expect(registered.status).toBe(201);
-    expect(registered.body.user.emailVerified).toBe(false);
+    const { client } = await createUser({ verified: false });
+    const session = await client.get<{ user: { emailVerified: boolean } }>("/api/auth/session");
+    expect(session.body.user.emailVerified).toBe(false);
 
     const upload = await client.upload(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
     expect(upload.status).toBe(403);
@@ -67,11 +54,13 @@ describe("registration and email verification", () => {
   });
 
   it("verifies the email token exactly once", async () => {
-    const client = new Client("verify");
-    const registered = await client.post<{ previewUrl: string }>("/api/auth/register", {
-      email: uniqueEmail(),
-      password: PASSWORD,
+    const admin = await createUser();
+    await db.query("insert into admin_roles (user_id, role) values ($1, 'admin')", [admin.userId]);
+    const client = admin.client;
+    const registered = await client.post<{ previewUrl: string }>("/api/admin/users", {
+      email: uniqueEmail(), password: PASSWORD,
     });
+    expect(registered.status).toBe(201);
     const token = extractToken(registered.body.previewUrl);
     expect(token).toBeTruthy();
 
@@ -95,7 +84,7 @@ describe("registration and email verification", () => {
 });
 
 describe("login, sessions and logout", () => {
-  it("registers a Free account with the configured Free quota", async () => {
+  it("provisions a Free account with the configured Free quota", async () => {
     const { client, email } = await createUser();
     const session = await client.get<{
       user: { email: string; plan: string; isAdmin: boolean } | null;

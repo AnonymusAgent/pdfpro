@@ -85,7 +85,12 @@ export function AccountWorkspace({
       </nav>
 
       <div className="space-y-5">
-        {tab === "profile" && <ProfilePanel user={user} profile={profile} onSaved={() => router.refresh()} />}
+        {tab === "profile" && (
+          <>
+            <ProfilePanel user={user} profile={profile} onSaved={() => router.refresh()} />
+            {user.isAdmin && <AdminCreateUser />}
+          </>
+        )}
         {tab === "security" && <SecurityPanel user={user} />}
         {tab === "billing" && <BillingPanel entitlements={entitlements} payments={payments} />}
         {tab === "devices" && <DevicesPanel sessions={sessions} onChanged={() => router.refresh()} />}
@@ -222,6 +227,56 @@ function ProfilePanel({ user, profile, onSaved }: { user: SessionUserPublic; pro
 }
 
 /* ------------------------------------------------------------------ */
+
+/** Only rendered for an administrator. The API checks the role again on every request. */
+function AdminCreateUser() {
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const { ok, data } = await send<{ email: string; emailDelivered: boolean; previewUrl?: string }>(
+        "/api/admin/users", "POST", { email, displayName, password },
+      );
+      if (!ok) {
+        setError(data.error ?? "Could not add the user.");
+        return;
+      }
+      setMessage(`${data.email} added. ${data.emailDelivered ? "Verification sent (or recorded in the email outbox)." : "Email could not be delivered; check the admin email outbox and mail settings."}${data.previewUrl ? ` Verification link: ${data.previewUrl}` : ""}`);
+      setEmail("");
+      setDisplayName("");
+      setPassword("");
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Add a user" icon={<ShieldCheck size={17} className="text-blue-600" aria-hidden />}>
+      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">Only administrators can create accounts. Give the new user their temporary password through a secure channel; they must verify their email before uploading or subscribing.</p>
+      <form onSubmit={create} className="space-y-3">
+        {error && <Notice tone="error">{error}</Notice>}
+        {message && <Notice tone="success">{message}</Notice>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><label className={labelCls} htmlFor="managed-email">User email</label><input id="managed-email" className={inputCls} type="email" required maxLength={320} value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+          <div><label className={labelCls} htmlFor="managed-name">Name (optional)</label><input id="managed-name" className={inputCls} maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></div>
+          <div><label className={labelCls} htmlFor="managed-password">Temporary password</label><input id="managed-password" className={inputCls} type="password" autoComplete="new-password" required minLength={10} maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} /></div>
+        </div>
+        <Button variant="primary" disabled={busy} type="submit">{busy && <Loader2 size={14} className="animate-spin" aria-hidden />} Add user</Button>
+      </form>
+    </Card>
+  );
+}
 
 function SecurityPanel({ user }: { user: SessionUserPublic }) {
   const [current, setCurrent] = useState("");

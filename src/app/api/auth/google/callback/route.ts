@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { googleConfigured, resolveAppUrl } from "@/lib/server/config";
+import { HttpError } from "@/lib/server/api";
 import { exchangeGoogleCode, googleRedirectUri, signInWithGoogle } from "@/lib/server/auth";
 
 export const runtime = "nodejs";
@@ -44,6 +45,9 @@ export async function GET(request: NextRequest) {
     });
     await signInWithGoogle({ profile, request });
   } catch (exchangeError) {
+    if (exchangeError instanceof HttpError && (exchangeError.code === "registration_closed" || exchangeError.code === "admin_password_required")) {
+      return fail(exchangeError.code);
+    }
     console.error("[auth] google sign-in failed", exchangeError);
     return fail("google_failed");
   }

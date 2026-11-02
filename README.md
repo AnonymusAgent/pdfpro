@@ -43,7 +43,7 @@ Legend: ✅ implemented and covered by an automated test · 🟡 implemented but
 | Bookmarks in rebuilt exports                                                                                              | ❌     | Bookmarks are shown and used for navigation, but are not carried into exports that rebuild pages   |
 | Optional-content layers (visibility toggles)                                                                              | ❌     | Not implemented                                                                                    |
 | Chrome extension (MV3): context menus, popup, hand-off to editor                                                          | 🟡     | Packaging and manifest verified by tests; not yet exercised in a real Chrome profile (see Testing) |
-| Accounts: email + password, verification, Google sign-in, reset, multi-device sessions                                    | ✅     | scrypt passwords, hashed opaque session tokens, per-device revocation                              |
+| Accounts: admin-created users, email + password, verification, existing-user Google sign-in, reset, multi-device sessions                                    | ✅     | scrypt passwords, hashed opaque session tokens, per-device revocation                              |
 | Cloudflare Turnstile on the auth forms                                                                                    | 🟡     | Implemented and gated; **disabled until the site key + secret key are supplied**                   |
 | Personal cloud storage (upload, preview, rename, delete, search, sort)                                                    | ✅     | Free 200 MB / Premium 2 GB (free-tier sizing, admin-editable), private keys, signed URLs, server-side quota |
 | Subscriptions: monthly + yearly Premium, admin-editable prices, lifecycle                                                 | ✅     | Safepay hosted checkout; Premium only on a verified payment; prices come from the database         |
@@ -54,7 +54,7 @@ Legend: ✅ implemented and covered by an automated test · 🟡 implemented but
 
 | Surface                                      | Route                                                                         | Who                                      |
 | -------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
-| Sign in / register / verify / reset          | `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password` | Everyone                                 |
+| Sign in / verify / reset / closed signup | `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password` | Sign in open; account creation admin-only |
 | Dashboard                                    | `/dashboard`                                                                  | Signed in                                |
 | Cloud file manager                           | `/cloud`                                                                      | Signed in + verified email               |
 | Pricing                                      | `/pricing`                                                                    | Everyone (prices read from the database) |
@@ -142,9 +142,7 @@ npm run dev                     # development server on http://localhost:3000
 
 To read verification and password-reset links locally, set
 `EMAIL_TRANSPORT=console` and `AUTH_EXPOSE_DEV_LINKS=true`. Links are then printed to the
-server log and returned in the API response; the dashboard also shows the verification link
-right after registration. Grant yourself the administrator role with
-`npm run admin:grant -- you@example.com` (or list the address in `ADMIN_EMAILS`).
+server log and returned in the API response; the administrator can inspect verification links in the email outbox. Public signup is closed; bootstrap the first administrator using `npm run admin:bootstrap -- alimukhtar@pdfpro.com` with an ephemeral `PDFPRO_BOOTSTRAP_PASSWORD` (see `docs/DEPLOYMENT.md`). After signing in, administrators add users from Account settings → Profile. Never commit passwords or run bootstrap against the wrong database.
 
 `npm run db:dev` runs a real PostgreSQL server (PGlite over the wire protocol) from
 `node_modules` — no database install needed for development. Production must use PostgreSQL.
@@ -162,8 +160,8 @@ Re-run `node scripts/setup-assets.mjs` after upgrading `pdfjs-dist`, `tesseract.
 
 ```bash
 npm run build                   # integration tests run against the production build
-npm run test:unit               # Vitest: 89 unit tests
-npm run test:integration        # Vitest + HTTP: 44 tests (needs a database and a free port 3300)
+npm run test:unit               # Vitest: 101 unit tests
+npm run test:integration        # Vitest + HTTP: 45 tests (needs a database and a free port 3300)
 npx playwright install chromium # once; on Linux also: sudo npx playwright install-deps chromium
 npm run test:e2e                # Playwright: 21 browser workflows against the production build
 npm run test                    # unit + integration
@@ -172,7 +170,7 @@ npx eslint .                    # lint (0 errors; a few intentional <img> warnin
 ```
 
 The integration suite boots `next start` on port 3300 (or reuses a server already there) and
-talks to it over HTTP with its own cookie jar. It covers registration/verification, login and
+talks to it over HTTP with its own cookie jar. It covers closed registration/admin provisioning/verification, login and
 multi-device sessions, password reset, CSRF, storage isolation, quota enforcement, signed
 URLs, webhook signature verification, idempotency, amount mismatches, refunds, grace periods,
 expiry, admin RBAC and settings changes. Point `DATABASE_URL` at a disposable database: the

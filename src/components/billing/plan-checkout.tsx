@@ -45,10 +45,10 @@ export function PlanCheckoutButton({
   if (!signedIn) {
     return (
       <Link
-        href={`/register?next=${encodeURIComponent("/pricing")}`}
+        href="/login?next=/pricing"
         className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ${base}`}
       >
-        Create an account to subscribe
+        Sign in to subscribe
       </Link>
     );
   }

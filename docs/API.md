@@ -25,7 +25,7 @@ The endpoints below were added with accounts, cloud storage and billing. Every m
 
 | Method | Path                            | Purpose                                                                                                                         |
 | ------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/api/auth/register`            | Create an account; sends the verification email. `201` with the session payload.                                                |
+| POST   | `/api/auth/register`            | Closed; always `403 registration_closed`. Accounts are added by signed-in administrators.                                                |
 | POST   | `/api/auth/login`               | Email + password sign-in. Sets the session cookie.                                                                              |
 | POST   | `/api/auth/logout`              | Revoke the current session and clear the cookie.                                                                                |
 | GET    | `/api/auth/session`             | Current user, entitlements, notifications and integration flags. `no-store`.                                                    |
@@ -35,10 +35,12 @@ The endpoints below were added with accounts, cloud storage and billing. Every m
 | POST   | `/api/auth/reset-password`      | `{ token, password }` — revokes every session.                                                                                  |
 | POST   | `/api/auth/password`            | `{ currentPassword, newPassword }` — revokes the other devices, keeps this one.                                                 |
 | GET    | `/api/auth/google/start`        | Redirect to Google (PKCE). `302` to `/login?error=google_unavailable` when unconfigured.                                        |
-| GET    | `/api/auth/google/callback`     | Exchange the code, verify the ID token, create the session.                                                                     |
+| GET    | `/api/auth/google/callback`     | Exchange the code, verify the ID token and sign in existing non-admin users only; cannot create new accounts or sign in as admin.                                                                     |
+
+Administrator account creation: `POST /api/admin/users` with `{ email, password, displayName? }` requires an administrator session and same origin, is rate-limited, returns `201` with `id`, `email`, `emailDelivered`, `emailTransport` (and `previewUrl` only when development links are enabled). It never signs in as the new user. A `409 email_taken` leaves the existing user untouched. The admin UI is under Account settings → Profile → Add a user.
 
 When Cloudflare Turnstile is configured (`TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`),
-`register`, `login`, `forgot-password` and `reset-password` additionally require the widget's
+`login`, `forgot-password` and `reset-password` additionally require the widget's
 single-use token in the JSON body as `turnstileToken`. Failures are
 
 | Status | `code`                     | Meaning                                                           |

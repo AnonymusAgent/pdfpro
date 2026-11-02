@@ -27,8 +27,23 @@ npm run build
 npm run start                      # or a process manager / container
 ```
 
-The first verified sign-in for an address listed in `ADMIN_EMAILS` grants the administrator
-role. Otherwise grant it explicitly:
+Public signup is disabled. Bootstrap the **first** administrator only after running migrations,
+from a trusted operator machine with direct database access. Pass the temporary password in
+an ephemeral environment variable (not a source file or command-line argument); e.g. enter it
+via your shell's hidden prompt and run:
+
+```bash
+read -rsp 'Temporary admin password: ' PDFPRO_BOOTSTRAP_PASSWORD; echo
+export PDFPRO_BOOTSTRAP_PASSWORD
+npm run admin:bootstrap -- alimukhtar@pdfpro.com
+unset PDFPRO_BOOTSTRAP_PASSWORD
+```
+
+The command refuses existing accounts, stores a salted scrypt hash, marks the operator-created
+account verified and grants the administrator role atomically. It never changes an existing
+password or data. Immediately sign in at `/login?next=/admin`, change the password in Account
+settings → Password & security, and add users in Account settings → Profile. Existing verified
+accounts can still be promoted by a trusted operator with:
 
 ```bash
 npm run admin:grant -- you@example.com
@@ -40,7 +55,7 @@ npm run admin:grant -- someone@example.com --remove
 
 All variables are documented in `.env.example`; `.env.local.example` is a ready-to-copy
 template with placeholder values for the recommended Neon + Cloudflare R2 stack. The only ones without which the app cannot
-run are `DATABASE_URL` and `AUTH_SECRET`; each optional integration degrades explicitly (the UI
+run are a database URL (`DATABASE_URL_POOLED` or `DATABASE_URL`, with `DATABASE_URL_UNPOOLED` as a fallback) and `AUTH_SECRET`; each optional integration degrades explicitly (the UI
 says what is unavailable and why) rather than failing at request time.
 
 Generate secrets:
@@ -50,6 +65,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # AUT
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # STORAGE_SIGNING_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # CRON_SECRET
 ```
+
+A successful build does not imply that the production database is ready. On Vercel, verify
+that the **production** environment has a nonempty Neon database URL, run `npm run db:status`
+and `npm run db:migrate` against that same production database from a trusted machine, and
+confirm `/api/health` returns `200` before bootstrapping the admin. Never run migrations or
+tests against production by accident. If Neon supplied only `DATABASE_URL_UNPOOLED`, the app
+can use it as a fallback; prefer a pooled URL for request traffic. No database credentials or
+bootstrap password should be committed or placed in public env vars.
 
 Set `AUTH_EXPOSE_DEV_LINKS=false` in production — it returns verification/reset links in API
 responses and exists only for local development and automated tests.
