@@ -7,19 +7,31 @@ import { Loader2 } from "lucide-react";
 import { inputCls, labelCls } from "@/components/ui";
 import { useSession } from "@/components/auth/session-provider";
 import { AuthShell, FormError, FormNotice, GoogleButton } from "@/components/auth/auth-shell";
+import { Turnstile } from "@/components/auth/turnstile";
 import type { SessionPayload } from "@/lib/session-types";
 
 const MIN_PASSWORD = 10;
 
-async function postJson<T>(url: string, body: unknown): Promise<{ ok: boolean; status: number; data: T & { error?: string; message?: string } }> {
+async function postJson<T>(
+  url: string,
+  body: unknown,
+): Promise<{ ok: boolean; status: number; data: T & { error?: string; message?: string; code?: string } }> {
   const response = await fetch(url, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
-  const data = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string };
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string; message?: string; code?: string };
   return { ok: response.ok, status: response.status, data };
+}
+
+/**
+ * A rejected or expired Turnstile token must not be retried: the widget is
+ * re-rendered so the next submit carries a fresh single-use token.
+ */
+function isTurnstileError(code?: string): boolean {
+  return Boolean(code && code.startsWith("turnstile"));
 }
 
 const OAUTH_ERRORS: Record<string, string> = {
@@ -36,22 +48,39 @@ const OAUTH_ERRORS: Record<string, string> = {
 /* Login                                                               */
 /* ------------------------------------------------------------------ */
 
-export function LoginForm({ googleEnabled, next, oauthError }: { googleEnabled: boolean; next: string; oauthError?: string }) {
+export function LoginForm({
+  googleEnabled,
+  next,
+  oauthError,
+  turnstileSiteKey = "",
+}: {
+  googleEnabled: boolean;
+  next: string;
+  oauthError?: string;
+  turnstileSiteKey?: string;
+}) {
   const router = useRouter();
   const { setSession } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(oauthError ? (OAUTH_ERRORS[oauthError] ?? "Sign-in failed.") : null);
   const [busy, setBusy] = useState(false);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaEpoch, setCaptchaEpoch] = useState(0);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const { ok, data } = await postJson<SessionPayload>("/api/auth/login", { email, password });
+      const { ok, data } = await postJson<SessionPayload>("/api/auth/login", {
+        email,
+        password,
+        turnstileToken: captcha ?? undefined,
+      });
       if (!ok) {
         setError(data.error ?? "Could not sign you in.");
+        if (isTurnstileError(data.code)) setCaptchaEpoch((value) => value + 1);
         return;
       }
       setSession(data);
@@ -108,6 +137,7 @@ export function LoginForm({ googleEnabled, next, oauthError }: { googleEnabled: 
             onChange={(event) => setPassword(event.target.value)}
           />
         </div>
+        <Turnstile siteKey={turnstileSiteKey} onToken={setCaptcha} resetKey={captchaEpoch} />
         <button
           type="submit"
           disabled={busy}
@@ -129,12 +159,14 @@ export function LoginForm({ googleEnabled, next, oauthError }: { googleEnabled: 
 /* Registration                                                        */
 /* ------------------------------------------------------------------ */
 
-export function RegisterForm({ googleEnabled }: { googleEnabled: boolean }) {
+export function RegisterForm({ googleEnabled, turnstileSiteKey = "" }: { googleEnabled: boolean; turnstileSiteKey?: string }) {
   const router = useRouter();
   const { setSession } = useSession();
   const [form, setForm] = useState({ displayName: "", email: "", password: "", confirm: "", marketing: false });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaEpoch, setCaptchaEpoch] = useState(0);
 
   const update = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -156,9 +188,11 @@ export function RegisterForm({ googleEnabled }: { googleEnabled: boolean }) {
         password: form.password,
         displayName: form.displayName,
         marketingOptIn: form.marketing,
+        turnstileToken: captcha ?? undefined,
       });
       if (!ok) {
         setError(data.error ?? "Could not create your account.");
+        if (isTurnstileError(data.code)) setCaptchaEpoch((value) => value + 1);
         return;
       }
       setSession(data);
@@ -251,6 +285,7 @@ export function RegisterForm({ googleEnabled }: { googleEnabled: boolean }) {
           />
           <span>Send me occasional product updates. You can turn this off at any time.</span>
         </label>
+        <Turnstile siteKey={turnstileSiteKey} onToken={setCaptcha} resetKey={captchaEpoch} />
         <button
           type="submit"
           disabled={busy}
@@ -272,12 +307,14 @@ export function RegisterForm({ googleEnabled }: { googleEnabled: boolean }) {
 /* Forgot password                                                     */
 /* ------------------------------------------------------------------ */
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ turnstileSiteKey = "" }: { turnstileSiteKey?: string }) {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaEpoch, setCaptchaEpoch] = useState(0);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -285,9 +322,13 @@ export function ForgotPasswordForm() {
     setError(null);
     setMessage(null);
     try {
-      const { ok, data } = await postJson<{ message?: string; previewUrl?: string }>("/api/auth/forgot-password", { email });
+      const { ok, data } = await postJson<{ message?: string; previewUrl?: string }>("/api/auth/forgot-password", {
+        email,
+        turnstileToken: captcha ?? undefined,
+      });
       if (!ok) {
         setError(data.error ?? "Could not send the reset email.");
+        if (isTurnstileError(data.code)) setCaptchaEpoch((value) => value + 1);
         return;
       }
       setMessage(data.message ?? "Check your inbox for the reset link.");
@@ -327,6 +368,7 @@ export function ForgotPasswordForm() {
             onChange={(event) => setEmail(event.target.value)}
           />
         </div>
+        <Turnstile siteKey={turnstileSiteKey} onToken={setCaptcha} resetKey={captchaEpoch} />
         <button
           type="submit"
           disabled={busy}
@@ -344,13 +386,23 @@ export function ForgotPasswordForm() {
 /* Reset password                                                      */
 /* ------------------------------------------------------------------ */
 
-export function ResetPasswordForm({ token, valid }: { token: string; valid: boolean }) {
+export function ResetPasswordForm({
+  token,
+  valid,
+  turnstileSiteKey = "",
+}: {
+  token: string;
+  valid: boolean;
+  turnstileSiteKey?: string;
+}) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaEpoch, setCaptchaEpoch] = useState(0);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -361,9 +413,14 @@ export function ResetPasswordForm({ token, valid }: { token: string; valid: bool
     }
     setBusy(true);
     try {
-      const { ok, data } = await postJson<{ message?: string }>("/api/auth/reset-password", { token, password });
+      const { ok, data } = await postJson<{ message?: string }>("/api/auth/reset-password", {
+        token,
+        password,
+        turnstileToken: captcha ?? undefined,
+      });
       if (!ok) {
         setError(data.error ?? "Could not reset the password.");
+        if (isTurnstileError(data.code)) setCaptchaEpoch((value) => value + 1);
         return;
       }
       setDone(true);
@@ -413,6 +470,7 @@ export function ResetPasswordForm({ token, valid }: { token: string; valid: bool
               onChange={(event) => setConfirm(event.target.value)}
             />
           </div>
+          <Turnstile siteKey={turnstileSiteKey} onToken={setCaptcha} resetKey={captchaEpoch} />
           <button
             type="submit"
             disabled={busy}

@@ -120,13 +120,15 @@ state tidy and sends notifications).
 - Suggested headers:
 
   ```
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://pagead2.googlesyndication.com; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://pagead2.googlesyndication.com; frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://pagead2.googlesyndication.com https://challenges.cloudflare.com; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://pagead2.googlesyndication.com https://challenges.cloudflare.com; frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   ```
 
-  Drop the AdSense hosts from the policy unless advertising is enabled.
+  Drop the AdSense hosts from the policy unless advertising is enabled, and the
+  `challenges.cloudflare.com` entries unless Turnstile is enabled
+  (see [`CLOUDFLARE_SETUP.md`](CLOUDFLARE_SETUP.md)).
 
 ## 8. Health and observability
 
