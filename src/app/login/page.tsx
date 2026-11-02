@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { googleConfigured } from "@/lib/server/config";
+import { googleConfigured, publicTurnstileSiteKey } from "@/lib/server/config";
 import { readSession } from "@/lib/server/session";
 import { LoginForm } from "@/components/auth/forms";
 
@@ -22,6 +22,7 @@ export default async function LoginPage({
       googleEnabled={googleConfigured()}
       next={next}
       oauthError={params.error}
+      turnstileSiteKey={publicTurnstileSiteKey()}
     />
   );
 }

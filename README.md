@@ -44,6 +44,7 @@ Legend: ✅ implemented and covered by an automated test · 🟡 implemented but
 | Optional-content layers (visibility toggles)                                                                              | ❌     | Not implemented                                                                                    |
 | Chrome extension (MV3): context menus, popup, hand-off to editor                                                          | 🟡     | Packaging and manifest verified by tests; not yet exercised in a real Chrome profile (see Testing) |
 | Accounts: email + password, verification, Google sign-in, reset, multi-device sessions                                    | ✅     | scrypt passwords, hashed opaque session tokens, per-device revocation                              |
+| Cloudflare Turnstile on the auth forms                                                                                    | 🟡     | Implemented and gated; **disabled until the site key + secret key are supplied**                   |
 | Personal cloud storage (upload, preview, rename, delete, search, sort)                                                    | ✅     | Free 200 MB / Premium 2 GB (free-tier sizing, admin-editable), private keys, signed URLs, server-side quota |
 | Subscriptions: monthly + yearly Premium, admin-editable prices, lifecycle                                                 | ✅     | Safepay hosted checkout; Premium only on a verified payment; prices come from the database         |
 | Admin dashboard: users, subscriptions, payments, pricing, settings, email/webhook logs                                    | ✅     | Server-side RBAC, role grants only from `ADMIN_EMAILS`/CLI, every action audited                   |
@@ -214,6 +215,8 @@ Neon + Cloudflare R2 (dummy values only — never commit the filled-in `.env.loc
 | `SAFEPAY_*`                                      | for payments       | Merchant keys, webhook secret, environment (see `docs/SAFEPAY_SETUP.md`) |
 | `STORAGE_DRIVER=s3` + `S3_*` / `AWS_*`           | for cloud storage  | Private bucket — Cloudflare R2 recommended (see `docs/STORAGE_SETUP.md`) |
 | `FREE_PLAN_STORAGE_BYTES` / `PREMIUM_PLAN_STORAGE_BYTES` | optional   | Quota defaults (200 MiB / 2 GiB); Admin → Pricing overrides per plan    |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`    | optional           | Cloudflare human verification on auth (see `docs/CLOUDFLARE_SETUP.md`)   |
+| `CLOUDFLARE_VERIFICATION_TOKEN` / `CLOUDFLARE_CUSTOM_HOSTNAME_TOKEN` | optional | Domain-verification meta tag / `/.well-known` challenge file      |
 | `ADSENSE_*`                                      | optional           | Advertising (see `docs/ADSENSE_SETUP.md`)                                |
 | `ADMIN_EMAILS`                                   | optional           | Addresses that become administrators on first verified sign-in           |
 | `CRON_SECRET`                                    | recommended        | Bearer secret for `/api/cron/maintenance`                                |
@@ -236,7 +239,8 @@ Full instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), Neon in
 [`docs/NEON_SETUP.md`](docs/NEON_SETUP.md), object storage in
 [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md), payments in
 [`docs/SAFEPAY_SETUP.md`](docs/SAFEPAY_SETUP.md), advertising in
-[`docs/ADSENSE_SETUP.md`](docs/ADSENSE_SETUP.md), and the current verification status in
+[`docs/ADSENSE_SETUP.md`](docs/ADSENSE_SETUP.md), Cloudflare verification in
+[`docs/CLOUDFLARE_SETUP.md`](docs/CLOUDFLARE_SETUP.md), and the current verification status in
 [`docs/TESTING_REPORT.md`](docs/TESTING_REPORT.md).
 
 ## Limitations (summary)

@@ -11,7 +11,7 @@ claimed without a run. Commands are reproducible from a clean checkout.
 | Lint (new code)   | `npx eslint src/components/{auth,ads,billing,cloud,account,admin} src/lib/server src/app/api tests scripts` | **0 errors, 0 warnings**                                                                                                                                                                                                           |
 | Lint (whole repo) | `npx eslint .`                                                                                              | 0 errors in this work; 13 pre-existing errors remain in `EditorWorkspace.tsx`, `PageView.tsx`, `OcrWorkspace.tsx` (refs read during render / setState in effect) — untouched legacy editor code                                    |
 | Production build  | `npm run build`                                                                                             | **success**, 41 routes compiled (all SaaS routes dynamic `ƒ`)                                                                                                                                                                      |
-| Unit tests        | `npm run test:unit`                                                                                         | **89 passed / 89** in 11 files                                                                                                                                                                                                     |
+| Unit tests        | `npm run test:unit`                                                                                         | **98 passed / 98** in 12 files                                                                                                                                                                                                     |
 | Integration tests | `npm run build && npm run test:integration`                                                                 | **44 passed / 44** in 4 files, ~7 s                                                                                                                                                                                                |
 | Browser e2e       | `npm run test:e2e`                                                                                          | **not executed here**: `npx playwright install chromium` fails in this sandbox (download blocked, no system Chrome). The 21 specs collect successfully (`npx playwright test --list`) and run in CI/local with browsers installed. |
 
@@ -33,11 +33,32 @@ database:
 The migration only rewrites rows that still carry the old seeded defaults, so plan prices,
 quotas and descriptions an administrator has already edited are preserved.
 
+### Cloudflare verification (verified on 2026-11-02)
+
+Turnstile and the domain-verification tokens are gated on environment variables, so both the
+enabled and disabled paths were exercised.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Disabled by default | full suites with no Turnstile keys | 98 unit + 44 integration tests pass; no widget rendered, no server check |
+| Enabled build | `npm run build` with the Cloudflare test keys | compiles clean, route `ƒ /.well-known/cf-custom-hostname-challenge/[token]` registered |
+| Widget rendered | `curl /login` | “Protected by Cloudflare Turnstile” + site key in the HTML, widget container present |
+| Meta tag | `curl /login` | `<meta name="cf-verification" content="cf-verify-smoke-token"/>` |
+| Challenge file | `curl /.well-known/cf-custom-hostname-challenge/<token>` | `200` with the token for the configured value, `404` for anything else |
+| Token required | `POST /api/auth/login` without a token | `400 turnstile_required`, no password check performed |
+| Fail-closed | `POST /api/auth/login` with a bogus token (sandbox has no route to `challenges.cloudflare.com`) | `503 turnstile_unavailable`, sign-in refused |
+| Same gate on other forms | `POST /api/auth/forgot-password` without a token | `400 turnstile_required` |
+
+A live success path (`200` from `siteverify`) is covered by `tests/unit/turnstile.test.ts` with a
+stubbed `siteverify`; it could not be exercised against the real service from this sandbox, which
+has no outbound TLS to `challenges.cloudflare.com`.
+
 ## 2. Unit tests (`tests/unit`)
 
 | File                      | Covers                                                                                                                                                                                                                                                                                                                       |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `plans.test.ts`           | default 200 MB / 2 GB quota constants (free-tier sizing) + label formatting, remaining/percent maths, over-quota blocking without deleting files, negative-usage guard, byte and money formatting                                                                                                                                                                                 |
+| `turnstile.test.ts`       | Cloudflare Turnstile: no-op without keys, token required when configured, `siteverify` request shape (secret/token/IP), rejection with Cloudflare's error codes, hostname mismatch, fail-closed on 5xx/timeout/network error, host normalisation |
 | `security.test.ts`        | scrypt hash/verify, per-hash salt, malformed hash rejection, HMAC-SHA256/512, constant-time compare, token hashing, email/password policy, text sanitising, file-name traversal (`../../etc/passwd` → `passwd.pdf`)                                                                                                          |
 | `payments.test.ts`        | Safepay webhook HMAC-SHA512 accept/reject (tampering, wrong secret, missing header), redirect signature (HMAC-SHA256 over tracker), month/year period arithmetic, the exact Premium access rule for `active`/`pending`/`expired`/`past_due`+grace/`cancelled`, signed download tokens (foreign file, forged payload, expiry) |
 | plus 7 pre-existing files | geometry, layout, export, operations, conversions, validation, OCR helpers — 53 tests; fixtures are now generated by `npm run fixtures`                                                                                                                                                                                      |

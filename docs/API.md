@@ -37,6 +37,20 @@ The endpoints below were added with accounts, cloud storage and billing. Every m
 | GET    | `/api/auth/google/start`        | Redirect to Google (PKCE). `302` to `/login?error=google_unavailable` when unconfigured.                                        |
 | GET    | `/api/auth/google/callback`     | Exchange the code, verify the ID token, create the session.                                                                     |
 
+When Cloudflare Turnstile is configured (`TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`),
+`register`, `login`, `forgot-password` and `reset-password` additionally require the widget's
+single-use token in the JSON body as `turnstileToken`. Failures are
+
+| Status | `code`                     | Meaning                                                           |
+| ------ | -------------------------- | ----------------------------------------------------------------- |
+| `400`  | `turnstile_required`       | token missing, blank or malformed                                 |
+| `403`  | `turnstile_failed`         | Cloudflare rejected the token (expired, reused, invalid)          |
+| `403`  | `turnstile_hostname_mismatch` | token was issued for a different hostname                      |
+| `503`  | `turnstile_unavailable`    | `siteverify` unreachable / non-2xx / timed out; the request is refused |
+
+With no keys the field is ignored and the routes behave as documented above. See
+[`CLOUDFLARE_SETUP.md`](CLOUDFLARE_SETUP.md).
+
 `GET /api/auth/session` returns:
 
 ```json

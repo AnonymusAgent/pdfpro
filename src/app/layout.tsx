@@ -2,13 +2,24 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { AppProviders } from "@/components/shell";
+import { config } from "@/lib/server/config";
 import { buildSessionPayload } from "@/lib/server/session-payload";
 import type { SessionPayload } from "@/lib/session-types";
+
+/**
+ * Cloudflare site/domain verification: when `CLOUDFLARE_VERIFICATION_TOKEN` is
+ * set, the token is emitted as `<meta name="cf-verification" content="…">` so a
+ * verification check can read it straight from the HTML. Unset ⇒ no meta tag.
+ */
+const siteVerificationToken = config.cloudflare.verificationToken;
 
 export const metadata: Metadata = {
   title: { default: "PDF Pro — Editor, Converter & OCR", template: "%s · PDF Pro" },
   description:
     "Edit, annotate, convert, OCR, sign, redact and compress PDFs. Files are processed in your browser by default, with optional private cloud storage.",
+  ...(siteVerificationToken
+    ? { verification: { other: { "cf-verification": siteVerificationToken } } }
+    : {}),
 };
 
 export const viewport: Viewport = {

@@ -81,6 +81,27 @@ export const config = {
     clientSecret: str(process.env.GOOGLE_CLIENT_SECRET),
   },
 
+  /**
+   * Cloudflare integration.
+   *
+   * - Turnstile is the human-verification widget in front of the unauthenticated
+   *   auth endpoints. It stays completely disabled (no widget, no server check)
+   *   until BOTH keys are present, so the app keeps working before the site is
+   *   registered with Cloudflare.
+   * - `verificationToken` is rendered as `<meta name="cf-verification">` for the
+   *   domain-verification flows that ask for a meta tag.
+   * - `customHostnameToken` is served at
+   *   `/.well-known/cf-custom-hostname-challenge/<token>` (Cloudflare for SaaS).
+   */
+  cloudflare: {
+    /** Public widget key. The NEXT_PUBLIC_ alias is accepted for compatibility. */
+    turnstileSiteKey: str(process.env.TURNSTILE_SITE_KEY, str(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY)),
+    /** Secret key — server only, never rendered into HTML. */
+    turnstileSecretKey: str(process.env.TURNSTILE_SECRET_KEY),
+    verificationToken: str(process.env.CLOUDFLARE_VERIFICATION_TOKEN),
+    customHostnameToken: str(process.env.CLOUDFLARE_CUSTOM_HOSTNAME_TOKEN),
+  },
+
   storage: {
     /**
      * `local` (private directory) or `s3` (any S3-compatible bucket, including
@@ -174,6 +195,19 @@ export function safepayConfigured(): boolean {
 /** True when Google sign-in can be offered. */
 export function googleConfigured(): boolean {
   return Boolean(config.google.clientId && config.google.clientSecret);
+}
+
+/**
+ * Turnstile is active only when both halves of the key pair exist: the public
+ * site key (rendered into the form) and the secret key (used for siteverify).
+ */
+export function turnstileConfigured(): boolean {
+  return Boolean(config.cloudflare.turnstileSiteKey && config.cloudflare.turnstileSecretKey);
+}
+
+/** Public site key for the widget; empty string when Turnstile is disabled. */
+export function publicTurnstileSiteKey(): string {
+  return turnstileConfigured() ? config.cloudflare.turnstileSiteKey : "";
 }
 
 /** Absolute application URL, falling back to the incoming request origin. */

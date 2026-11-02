@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assertSameOrigin, errorResponse, readJson } from "@/lib/server/api";
 import { resetPasswordWithToken } from "@/lib/server/auth";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { requireTurnstile } from "@/lib/server/turnstile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +11,8 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     await enforceRateLimit("reset-password", 20, 3600);
-    const body = await readJson<{ token?: string; password?: string }>(request);
+    const body = await readJson<{ token?: string; password?: string; turnstileToken?: string }>(request);
+    await requireTurnstile(request, body.turnstileToken);
     const result = await resetPasswordWithToken(String(body.token ?? ""), String(body.password ?? ""));
     return NextResponse.json({
       ok: true,
