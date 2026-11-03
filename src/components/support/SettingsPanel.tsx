@@ -22,7 +22,7 @@ export default function SettingsPanel() {
       .then((r) => {
         const merged = { ...loadSettings(), ...(r.settings as Partial<LocalSettings>) };
         setS(merged);
-        setServerNote("Loaded from your workspace database.");
+        setServerNote("Preferences loaded for this browser or signed-in workspace.");
       })
       .catch(() => {
         setS(loadSettings());
@@ -53,7 +53,7 @@ export default function SettingsPanel() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8">
-      <PageTitle title="Settings" description="Preferences are stored in this browser. Shared preferences are also saved to your workspace database when it is available." />
+      <PageTitle title="Settings" description="Preferences are stored in this browser and, when signed in, saved to your private workspace." />
       <div className="space-y-6">
         <Card title="Appearance and editor">
           <div className="grid gap-4 sm:grid-cols-2">

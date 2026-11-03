@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ScanText, Upload, Square, FileText, Table2, FileDown, Search, Copy } from "lucide-react";
 import { useWorkspace } from "@/lib/store";
 import { Button, Card, Dropzone, Notice, PageTitle, ProgressBar, Spinner, cn, inputCls, labelCls } from "@/components/ui";
-import { apiJson, baseName, downloadBytes } from "@/lib/browser";
+import { apiJson, baseName, bytesToBase64, downloadBytes } from "@/lib/browser";
 import { openPdf, pageSize, rasterize, canvasToBytes, releasePdf } from "@/lib/pdf/pdfjs";
 import { OCR_LANGUAGES, LOW_CONFIDENCE, buildSearchablePdf, runOcr, type OcrPageInput, type OcrPageResult } from "@/lib/pdf/ocr";
 import { layoutPage, type LayoutPage } from "@/lib/pdf/layout";
@@ -57,43 +57,37 @@ export default function OcrWorkspace() {
   const [selectedPage, setSelectedPage] = useState(0);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [find, setFind] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const addFiles = (files: File[]) => {
+    const next: JobState[] = [];
+    const accepted: File[] = [];
+    for (const f of files) {
+      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") { accepted.push(f); next.push({ id: `${f.name}-${Math.random().toString(36).slice(2, 7)}`, name: f.name, kind: "pdf", bytes: new ArrayBuffer(0), status: "queued", pages: [], jpegs: [] }); }
+      else if (/^image\/(png|jpeg)$/.test(f.type) || /\.(png|jpe?g)$/i.test(f.name)) { accepted.push(f); next.push({ id: `${f.name}-${Math.random().toString(36).slice(2, 7)}`, name: f.name, kind: "image", bytes: new ArrayBuffer(0), status: "queued", pages: [], jpegs: [] }); }
+      else notify("error", `${f.name}: OCR accepts PDF, PNG and JPEG files. Convert other formats to PDF first.`);
+    }
+    // Keep the bytes alongside the job record.
+    Promise.all(accepted.map((file) => file.arrayBuffer())).then((loaded) => {
+      setJobs((prev) => [
+        ...prev,
+        ...next.map((j, index) => ({ ...j, bytes: loaded[index] ?? new ArrayBuffer(0) })),
+      ]);
+      if (!selectedJob && next[0]) setSelectedJob(next[0].id);
+    });
+  };
 
   useEffect(() => {
     const staged = takeStaged();
     if (staged.length) addFiles(staged);
+    // The staging queue is consumed once when this workspace mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const job = jobs.find((j) => j.id === selectedJob) ?? jobs[0] ?? null;
   const page = job?.pages[selectedPage] ?? null;
-
-  useEffect(() => {
-    if (!job || !job.jpegs[selectedPage]) return;
-    const url = URL.createObjectURL(new Blob([job.jpegs[selectedPage] as BlobPart], { type: "image/jpeg" }));
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [job, selectedPage]);
-
-  const addFiles = (files: File[]) => {
-    const next: JobState[] = [];
-    for (const f of files) {
-      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") next.push({ id: `${f.name}-${Math.random().toString(36).slice(2, 7)}`, name: f.name, kind: "pdf", bytes: new ArrayBuffer(0), status: "queued", pages: [], jpegs: [] });
-      else if (/^image\/(png|jpeg)$/.test(f.type) || /\.(png|jpe?g)$/i.test(f.name)) next.push({ id: `${f.name}-${Math.random().toString(36).slice(2, 7)}`, name: f.name, kind: "image", bytes: new ArrayBuffer(0), status: "queued", pages: [], jpegs: [] });
-      else notify("error", `${f.name}: OCR accepts PDF, PNG and JPEG files. Convert other formats to PDF first.`);
-    }
-    // Keep the bytes alongside the job record.
-    Promise.all(
-      files.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })),
-    ).then((loaded) => {
-      setJobs((prev) => [
-        ...prev,
-        ...next.map((j) => ({ ...j, bytes: loaded.find((l) => l.name === j.name)?.bytes ?? new ArrayBuffer(0) })),
-      ]);
-      if (!selectedJob && next[0]) setSelectedJob(next[0].id);
-    });
-  };
+  const previewBytes = job?.jpegs[selectedPage];
+  const previewUrl = useMemo(() => previewBytes ? `data:image/jpeg;base64,${bytesToBase64(previewBytes)}` : null, [previewBytes]);
 
   const addActive = async () => {
     if (!active) return;

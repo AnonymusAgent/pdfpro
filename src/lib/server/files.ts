@@ -288,7 +288,7 @@ export async function deleteUserFile(userId: string, fileId: string): Promise<{ 
 
   // The record is gone for the user; storage cleanup is best effort but retried
   // by the maintenance job for any object that could not be removed.
-  await getStorageDriver().delete(row.storageKey).catch(() => undefined);
+  await getStorageDriver(row.storageDriver).delete(row.storageKey).catch(() => undefined);
   return { reclaimedBytes: size };
 }
 
@@ -299,7 +299,7 @@ export async function readFileStream(fileId: string): Promise<{ stream: Readable
     .where(and(eq(userFiles.id, fileId), eq(userFiles.status, "active")))
     .limit(1);
   if (!row) throw new HttpError(404, "File not found.", "not_found");
-  return { stream: await getStorageDriver().getStream(row.storageKey), row };
+  return { stream: await getStorageDriver(row.storageDriver).getStream(row.storageKey), row };
 }
 
 /* ------------------------------------------------------------------ */
@@ -372,16 +372,15 @@ export async function recomputeStorageUsage(userId: string): Promise<{ usedBytes
  * than 30 days. Never deletes a file row the user can still see.
  */
 export async function finalizePendingDeletions(limit = 50): Promise<{ purged: number }> {
-  const driver = getStorageDriver();
   const rows = await db
-    .select({ id: userFiles.id, storageKey: userFiles.storageKey })
+    .select({ id: userFiles.id, storageKey: userFiles.storageKey, storageDriver: userFiles.storageDriver })
     .from(userFiles)
     .where(eq(userFiles.status, "deleted"))
     .limit(limit);
   let purged = 0;
   for (const row of rows) {
     try {
-      await driver.delete(row.storageKey);
+      await getStorageDriver(row.storageDriver).delete(row.storageKey);
       const [removed] = await db.delete(userFiles).where(eq(userFiles.id, row.id)).returning({ id: userFiles.id });
       if (removed) purged += 1;
     } catch {

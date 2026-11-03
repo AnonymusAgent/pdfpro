@@ -3,6 +3,8 @@
  * API client and extension hand-off. Nothing here logs document content.
  */
 import type { EditState } from "@/lib/pdf/types";
+import { guestWorkspaceRequest } from "@/lib/browser-workspace";
+export { formatBytes } from "@/lib/plans";
 
 export type LocalSettings = {
   theme: "light" | "dark";
@@ -46,13 +48,6 @@ export function applyTheme(theme: "light" | "dark") {
 
 export function maxUploadBytes(): number {
   return loadSettings().maxFileMB * 1024 * 1024;
-}
-
-export function formatBytes(n: number): string {
-  if (!n || n < 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
-  return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 export function baseName(name: string): string {
@@ -197,7 +192,13 @@ export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw new ApiError(data.error || `Request failed (HTTP ${res.status})`, res.status);
+  if (!res.ok) {
+    if (res.status === 401) {
+      const local = guestWorkspaceRequest<T>(url, init);
+      if (local !== null) return local;
+    }
+    throw new ApiError(data.error || `Request failed (HTTP ${res.status})`, res.status);
+  }
   return data as T;
 }
 

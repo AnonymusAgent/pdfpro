@@ -179,5 +179,8 @@ describe("driver selection", () => {
   it("defaults to the local directory driver when nothing is configured", () => {
     expect(process.env.STORAGE_DRIVER ?? "local").not.toBe("s3");
     expect(getStorageDriver().name).toBe("local");
+    expect(getStorageDriver("local").name).toBe("local");
+    expect(() => getStorageDriver("s3")).toThrow(/credentials are incomplete/);
+    expect(() => getStorageDriver("unknown")).toThrow(/Unsupported storage driver/);
   });
 });

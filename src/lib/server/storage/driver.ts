@@ -93,17 +93,18 @@ class LocalDriver implements StorageDriver {
 
 /* ------------------------------------------------------------------ */
 
-let driver: StorageDriver | null = null;
+const drivers: Partial<Record<"local" | "s3", StorageDriver>> = {};
 
-export function getStorageDriver(): StorageDriver {
-  if (driver) return driver;
-  driver = config.storage.driver === "s3" ? new S3StorageDriver() : new LocalDriver();
-  return driver;
+/** Existing files must be read from the driver recorded at upload, even after configuration changes. */
+export function getStorageDriver(name: string = config.storage.driver): StorageDriver {
+  if (name !== "local" && name !== "s3") throw new Error(`Unsupported storage driver: ${name}`);
+  return (drivers[name] ??= name === "s3" ? new S3StorageDriver() : new LocalDriver());
 }
 
-/** Test helper: drop the cached driver so a new configuration is picked up. */
+/** Test helper: drop cached drivers so a new configuration is picked up. */
 export function resetStorageDriver(): void {
-  driver = null;
+  delete drivers.local;
+  delete drivers.s3;
 }
 
 export const storageRoot = LOCAL_ROOT;

@@ -15,11 +15,12 @@ import {
 import { sql } from "drizzle-orm";
 
 /* ------------------------------------------------------------------ */
-/* Existing workspace tables (unchanged – kept for data compatibility) */
+/* Existing workspace tables (additive ownership; old rows retained) */
 /* ------------------------------------------------------------------ */
 
 export const documents = pgTable("documents", {
   id: serial("id").primaryKey(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   size: integer("size").notNull().default(0),
   pages: integer("pages").notNull().default(0),
@@ -31,6 +32,7 @@ export const documents = pgTable("documents", {
 
 export const signatures = pgTable("signatures", {
   id: serial("id").primaryKey(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   dataUrl: text("data_url").notNull(),
   kind: text("kind").notNull().default("draw"),
@@ -46,6 +48,7 @@ export const settings = pgTable("settings", {
 
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   kind: text("kind").notNull(),
   fileName: text("file_name").notNull(),
   status: text("status").notNull().default("completed"),

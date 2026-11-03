@@ -159,9 +159,8 @@ function Overview() {
   }, []);
 
   useEffect(() => {
-    // Data fetch on mount / filter change; the loader is set inside `load`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
   }, [load]);
 
   const runLifecycle = async () => {
@@ -289,7 +288,6 @@ function UsersPanel() {
   useEffect(() => {
     const timer = setTimeout(() => void load(), 250);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   const act = async (userId: string, action: string, value?: string) => {
@@ -431,9 +429,8 @@ function SubscriptionsPanel() {
   }, []);
 
   useEffect(() => {
-    // Data fetch on mount / filter change; the loader is set inside `load`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
   }, [load]);
 
   const cancelNow = async (email: string) => {
@@ -515,9 +512,8 @@ function PaymentsPanel() {
   }, [status]);
 
   useEffect(() => {
-    // Data fetch on mount / filter change; the loader is set inside `load`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
   }, [load]);
 
   return (
@@ -596,9 +592,8 @@ function PlansPanel() {
   }, []);
 
   useEffect(() => {
-    // Data fetch on mount / filter change; the loader is set inside `load`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
   }, [load]);
 
   const update = (id: string, patch: Partial<PlanDTO>) => {
@@ -723,7 +718,6 @@ function SettingsPanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void (async () => {
       const { data } = await getJson<{ billing: BillingSettings; adsense: AdsenseSettings; storage: StorageSettings }>("/api/admin/settings");
       setBilling(data.billing ?? null);
@@ -880,9 +874,8 @@ function OpsPanel() {
   }, []);
 
   useEffect(() => {
-    // Data fetch on mount / filter change; the loader is set inside `load`.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
   }, [load]);
 
   const copyText = useMemo(() => (email: OutboxEmail) => `${email.subject}\n\n${email.body}`, []);
