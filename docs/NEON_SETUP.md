@@ -62,6 +62,18 @@ checksum changed.
 (Free 200 MiB, Premium 2 GiB) and lowers the default upload cap to 50 MiB — only for rows that
 still hold the original defaults, so customised plans survive.
 
+`drizzle/0003_private_workspace.sql` adds a workspace scope to existing document history,
+processing jobs and saved signatures, and archives old preferences separately. **It does not
+overwrite or delete legacy rows.** Old unattributed records remain in PostgreSQL under the
+`legacy` workspace, hidden from user and guest endpoints until an operator can prove ownership;
+never assign them to the first person who visits. New account records use `user:<id>` and
+guests receive an opaque HttpOnly cookie tied to a private `guest:<token>` workspace.
+
+Before running migrations against an existing project, verify the **exact database name** in
+the connection URL (the Neon project name and PostgreSQL database name can differ), take a
+backup or create a Neon branch, and inspect `npm run db:status` against the intended target.
+Never run test suites against production: integration tests insert and delete accounts.
+
 ## 4. Verify
 
 ```bash

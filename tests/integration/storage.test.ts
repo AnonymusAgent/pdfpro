@@ -46,6 +46,9 @@ describe("cloud storage", () => {
 
     const search = await client.get<{ files: unknown[] }>("/api/files?q=quarterly");
     expect(search.body.files).toHaveLength(1);
+    const invalidPage = await client.get<{ files: unknown[] }>("/api/files?limit=NaN&offset=broken");
+    expect(invalidPage.status).toBe(200);
+    expect(invalidPage.body.files).toHaveLength(1);
     const noMatch = await client.get<{ files: unknown[] }>("/api/files?q=nothing-matches");
     expect(noMatch.body.files).toHaveLength(0);
 
@@ -71,6 +74,16 @@ describe("cloud storage", () => {
 
     expect((await client.get(`/api/files/${fileId}`)).status).toBe(404);
     expect((await fetch(new URL(signed.body.url, BASE_URL))).status).toBe(404);
+  });
+
+  it("revokes previously signed download links when an account is suspended", async () => {
+    const { client, userId } = await createUser();
+    const uploaded = await client.upload<{ file: { id: string } }>(await makePdf("Suspension probe"), "probe.pdf");
+    const signed = await client.get<{ url: string }>(`/api/files/${uploaded.body.file.id}/url`);
+    expect((await fetch(new URL(signed.body.url, BASE_URL))).status).toBe(200);
+    await db.query("update users set account_status = 'suspended' where id = $1", [userId]);
+    expect((await fetch(new URL(signed.body.url, BASE_URL))).status).toBe(403);
+    await db.query("update users set account_status = 'active' where id = $1", [userId]);
   });
 
   it("keeps every account's files private", async () => {

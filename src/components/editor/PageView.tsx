@@ -434,6 +434,18 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
     if (g.kind === "box") finishBox(c, c.tool, g.start, p);
   };
 
+  // The callbacks inside renderAnn are DOM handlers, not render-time calls.
+  /* eslint-disable react-hooks/refs -- nested JSX event handlers access refs only after user interaction */
+  const selectAnnotation = (e: ReactPointerEvent<HTMLDivElement>, a: Ann) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    ctlRef.current.setSelected(a.id);
+    const p = pagePoint(e);
+    gesture.current = { kind: "move", id: a.id, offset: { x: p.x - a.x, y: p.y - a.y }, base: anns };
+  };
+
+  const editAnnotation = (id: string) => ctlRef.current.setEditing(id);
+
   const renderAnn = (a: Ann, isDraft = false): ReactNode => {
     const selected = !isDraft && ctl.selectedId === a.id;
     const editing = !isDraft && ctl.editingId === a.id;
@@ -537,14 +549,10 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
         style={boxStyle}
         onPointerDown={(e) => {
           if (!interactive) return;
-          e.stopPropagation();
-          e.currentTarget.setPointerCapture(e.pointerId);
-          ctlRef.current.setSelected(a.id);
-          const p = pagePoint(e);
-          gesture.current = { kind: "move", id: a.id, offset: { x: p.x - a.x, y: p.y - a.y }, base: anns };
+          selectAnnotation(e, a);
         }}
         onDoubleClick={() => {
-          if (interactive && isText) ctlRef.current.setEditing(a.id);
+          if (interactive && isText) editAnnotation(a.id);
         }}
       >
         {body}
@@ -588,6 +596,8 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
 
   const cursor = tool === "select" ? "default" : tool === "hand" ? "grab" : tool === "text" || tool === "edittext" ? "text" : "crosshair";
   const crop = entry.crop;
+
+  /* eslint-enable react-hooks/refs */
 
   return (
     <div

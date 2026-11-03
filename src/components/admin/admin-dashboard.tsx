@@ -289,7 +289,6 @@ function UsersPanel() {
   useEffect(() => {
     const timer = setTimeout(() => void load(), 250);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   const act = async (userId: string, action: string, value?: string) => {
@@ -723,7 +722,6 @@ function SettingsPanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void (async () => {
       const { data } = await getJson<{ billing: BillingSettings; adsense: AdsenseSettings; storage: StorageSettings }>("/api/admin/settings");
       setBilling(data.billing ?? null);

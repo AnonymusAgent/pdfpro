@@ -11,11 +11,12 @@ import {
   bigserial,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 /* ------------------------------------------------------------------ */
-/* Existing workspace tables (unchanged – kept for data compatibility) */
+/* Existing workspace tables (additive owner columns; keep legacy rows) */
 /* ------------------------------------------------------------------ */
 
 export const documents = pgTable("documents", {
@@ -27,6 +28,7 @@ export const documents = pgTable("documents", {
   starred: boolean("starred").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  workspaceId: text("workspace_id").notNull().default("legacy"),
 });
 
 export const signatures = pgTable("signatures", {
@@ -35,7 +37,15 @@ export const signatures = pgTable("signatures", {
   dataUrl: text("data_url").notNull(),
   kind: text("kind").notNull().default("draw"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  workspaceId: text("workspace_id").notNull().default("legacy"),
 });
+
+export const workspaceSettings = pgTable("workspace_settings", {
+  workspaceId: text("workspace_id").notNull(),
+  key: text("key").notNull(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.key] })]);
 
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
@@ -53,6 +63,7 @@ export const jobs = pgTable("jobs", {
   outputSize: integer("output_size").notNull().default(0),
   message: text("message"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  workspaceId: text("workspace_id").notNull().default("legacy"),
 });
 
 /* ------------------------------------------------------------------ */

@@ -21,8 +21,9 @@ export default function RecentPanel() {
       const [d, j] = await Promise.all([apiJson<{ documents: DocRow[] }>("/api/documents"), apiJson<{ jobs: JobRow[] }>("/api/jobs")]);
       setDocs(d.documents);
       setJobs(j.jobs);
+      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load history. Is the database running?");
+      setError(e instanceof Error ? e.message : "Could not load history from this workspace.");
       setDocs([]);
       setJobs([]);
     }
@@ -30,24 +31,9 @@ export default function RecentPanel() {
   }, [refreshRecoverable]);
 
   useEffect(() => {
-    let alive = true;
-    Promise.all([apiJson<{ documents: DocRow[] }>("/api/documents"), apiJson<{ jobs: JobRow[] }>("/api/jobs")])
-      .then(([d, j]) => {
-        if (!alive) return;
-        setDocs(d.documents);
-        setJobs(j.jobs);
-      })
-      .catch((e: Error) => {
-        if (!alive) return;
-        setError(e.message || "Could not load history. Is the database running?");
-        setDocs([]);
-        setJobs([]);
-      });
-    void refreshRecoverable();
-    return () => {
-      alive = false;
-    };
-  }, [refreshRecoverable]);
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
+  }, [load]);
 
   const toggleStar = async (d: DocRow) => {
     await apiJson("/api/documents", { method: "PATCH", body: JSON.stringify({ id: d.id, starred: !d.starred }) }).catch((e: Error) => notify("error", e.message));
@@ -76,7 +62,7 @@ export default function RecentPanel() {
         description="Recently opened documents (name, size and page count only), recovery copies of unsaved work, and a processing log. No document content is stored here."
         actions={<Button onClick={() => void load()}><RefreshCw size={14} /> Refresh</Button>}
       />
-      {error && <div className="mb-4"><Notice tone="warn">{error}. Documents and jobs need the PostgreSQL database; the editor and tools still work without it.</Notice></div>}
+      {error && <div className="mb-4"><Notice tone="warn">{error}. The editor and PDF tools still work without history.</Notice></div>}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Documents" icon={<Clock size={18} aria-hidden />}>
           {docs === null && <p className="text-sm text-slate-500">Loading…</p>}

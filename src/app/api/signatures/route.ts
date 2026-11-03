@@ -1,48 +1,47 @@
 import { db } from "@/db";
 import { signatures } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
+import { assertSameOrigin, errorResponse, HttpError, readJson } from "@/lib/server/api";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { workspaceScope } from "@/lib/server/workspace-scope";
 
 export const dynamic = "force-dynamic";
 
 const MAX_DATA_URL = 700_000;
 
-/** Saved signature images. Stored only when the user explicitly clicks "Save signature". */
-export async function GET() {
+/** Saved signature images are private to a user or an opaque guest workspace. */
+export async function GET(request: Request) {
   try {
-    const rows = await db.select().from(signatures).orderBy(desc(signatures.createdAt)).limit(20);
+    const owner = await workspaceScope(request);
+    const rows = await db.select().from(signatures).where(eq(signatures.workspaceId, owner)).orderBy(desc(signatures.createdAt)).limit(20);
     return Response.json({ signatures: rows });
-  } catch {
-    return Response.json({ error: "Database unavailable." }, { status: 503 });
-  }
+  } catch (error) { return errorResponse(error); }
 }
 
-export async function POST(req: Request) {
-  let b: Record<string, unknown>;
+export async function POST(request: Request) {
   try {
-    b = (await req.json()) as Record<string, unknown>;
-  } catch {
-    return Response.json({ error: "Request body must be JSON." }, { status: 400 });
-  }
-  const dataUrl = typeof b.dataUrl === "string" ? b.dataUrl : "";
-  if (!/^data:image\/(png|jpeg);base64,/.test(dataUrl)) return Response.json({ error: "Signature must be a PNG or JPEG image." }, { status: 400 });
-  if (dataUrl.length > MAX_DATA_URL) return Response.json({ error: "Signature image is too large." }, { status: 413 });
-  const name = typeof b.name === "string" && b.name.trim() ? b.name.trim().slice(0, 80) : "Signature";
-  const kind = b.kind === "type" || b.kind === "upload" ? b.kind : "draw";
-  try {
-    const [row] = await db.insert(signatures).values({ name, dataUrl, kind }).returning();
+    assertSameOrigin(request);
+    const owner = await workspaceScope(request);
+    await enforceRateLimit(`signature:${owner}`, 30, 3600);
+    const body = await readJson<{ dataUrl?: unknown; name?: unknown; kind?: unknown }>(request, MAX_DATA_URL + 2048);
+    const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl : "";
+    if (!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(dataUrl)) throw new HttpError(400, "Signature must be a PNG or JPEG image.", "invalid_image");
+    if (dataUrl.length > MAX_DATA_URL) throw new HttpError(413, "Signature image is too large.", "image_too_large");
+    const name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 80) : "Signature";
+    const kind = body.kind === "type" || body.kind === "upload" ? body.kind : "draw";
+    const [row] = await db.insert(signatures).values({ workspaceId: owner, name, dataUrl, kind }).returning();
     return Response.json({ signature: row }, { status: 201 });
-  } catch {
-    return Response.json({ error: "Could not save the signature." }, { status: 500 });
-  }
+  } catch (error) { return errorResponse(error); }
 }
 
-export async function DELETE(req: Request) {
-  const id = Number(new URL(req.url).searchParams.get("id"));
-  if (!Number.isInteger(id) || id <= 0) return Response.json({ error: "A valid id is required." }, { status: 400 });
+export async function DELETE(request: Request) {
   try {
-    await db.delete(signatures).where(eq(signatures.id, id));
+    assertSameOrigin(request);
+    const owner = await workspaceScope(request);
+    const id = Number(new URL(request.url).searchParams.get("id"));
+    if (!Number.isSafeInteger(id) || id <= 0) throw new HttpError(400, "A valid id is required.", "invalid_id");
+    const [deleted] = await db.delete(signatures).where(and(eq(signatures.id, id), eq(signatures.workspaceId, owner))).returning({ id: signatures.id });
+    if (!deleted) throw new HttpError(404, "Signature not found.", "not_found");
     return Response.json({ ok: true });
-  } catch {
-    return Response.json({ error: "Could not delete the signature." }, { status: 500 });
-  }
+  } catch (error) { return errorResponse(error); }
 }
