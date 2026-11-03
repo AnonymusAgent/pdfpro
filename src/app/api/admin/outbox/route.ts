@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { errorResponse } from "@/lib/server/api";
+import { boundedInt, errorResponse } from "@/lib/server/api";
 import { requireAdmin } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     await requireAdmin();
-    const limit = Math.min(100, Math.max(1, Number(new URL(request.url).searchParams.get("limit") ?? 30)));
+    const limit = boundedInt(Number(new URL(request.url).searchParams.get("limit") ?? 30), 30, 1, 100);
     const rows = await db.execute<{
       id: string;
       to_email: string;

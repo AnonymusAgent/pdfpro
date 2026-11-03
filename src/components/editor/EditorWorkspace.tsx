@@ -728,7 +728,8 @@ function EditorBody({ doc, openMore }: { doc: DocRecord; openMore: () => void })
 
   /* ---- keyboard shortcuts ---- */
 
-  keyHandler.current = (e: KeyboardEvent) => {
+  useEffect(() => {
+    keyHandler.current = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement | null;
     const typing = !!t?.closest?.("input, textarea, select, [contenteditable='true']");
     const mod = e.metaKey || e.ctrlKey;
@@ -778,7 +779,8 @@ function EditorBody({ doc, openMore }: { doc: DocRecord; openMore: () => void })
     else if (e.key === "-") setZoomMode((z) => clamp((typeof z === "number" ? z : zoom) - 0.1, 0.2, 4));
     else if (e.key === "0") setZoomMode("width");
     else if (SHORTCUTS[k]) setTool(SHORTCUTS[k]);
-  };
+    };
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keyHandler.current(e);

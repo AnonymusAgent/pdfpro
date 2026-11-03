@@ -101,6 +101,14 @@ export function getStorageDriver(): StorageDriver {
   return driver;
 }
 
+/** Existing rows may have been written before STORAGE_DRIVER changed. */
+export function getStorageDriverFor(name: string): StorageDriver {
+  if (name === config.storage.driver) return getStorageDriver();
+  if (name === "local") return new LocalDriver();
+  if (name === "s3") return new S3StorageDriver();
+  throw new Error(`Unsupported storage driver for an existing file: ${name}`);
+}
+
 /** Test helper: drop the cached driver so a new configuration is picked up. */
 export function resetStorageDriver(): void {
   driver = null;

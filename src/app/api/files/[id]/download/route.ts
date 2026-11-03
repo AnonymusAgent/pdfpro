@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { userFiles } from "@/db/schema";
+import { userFiles, users } from "@/db/schema";
 import { errorResponse, HttpError } from "@/lib/server/api";
 import { readFileStream, verifySignedFileToken } from "@/lib/server/files";
 import { readSession } from "@/lib/server/session";
@@ -27,7 +27,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (token) {
       const verified = verifySignedFileToken(token, id);
       if (!verified) throw new HttpError(403, "This download link has expired. Refresh the page to get a new one.", "invalid_token");
-      authorizedUserId = verified.userId;
+      // Signed links are short-lived, but suspension must revoke them immediately.
+      const [owner] = await db.select({ id: users.id }).from(users)
+        .where(and(eq(users.id, verified.userId), eq(users.accountStatus, "active")))
+        .limit(1);
+      if (!owner) throw new HttpError(403, "This download link is no longer available.", "account_inactive");
+      authorizedUserId = owner.id;
     } else {
       const session = await readSession({ touch: true });
       if (!session) throw new HttpError(401, "Please sign in to download this file.", "unauthenticated");
