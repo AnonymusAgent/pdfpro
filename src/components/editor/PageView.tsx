@@ -341,19 +341,7 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
 
   const onDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const c = ctlRef.current;
-    if (!ready || e.button !== 0) return;
-    if (c.tool === "select") {
-      const id = (e.target as HTMLElement).closest("[data-ann]")?.getAttribute("data-ann");
-      const ann = anns.find((item) => item.id === id);
-      if (!ann) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      c.setSelected(ann.id);
-      const p = pagePoint(e);
-      gesture.current = (e.target as HTMLElement).closest("[data-handle]")
-        ? { kind: "resize", id: ann.id, base: anns }
-        : { kind: "move", id: ann.id, offset: { x: p.x - ann.x, y: p.y - ann.y }, base: anns };
-      return;
-    }
+    if (!ready || e.button !== 0 || c.tool === "select") return;
     const p = pagePoint(e);
     overlayRef.current?.setPointerCapture(e.pointerId);
     switch (c.tool) {
@@ -445,6 +433,18 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
     }
     if (g.kind === "box") finishBox(c, c.tool, g.start, p);
   };
+
+  // The callbacks inside renderAnn are DOM handlers, not render-time calls.
+  /* eslint-disable react-hooks/refs -- nested JSX event handlers access refs only after user interaction */
+  const selectAnnotation = (e: ReactPointerEvent<HTMLDivElement>, a: Ann) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    ctlRef.current.setSelected(a.id);
+    const p = pagePoint(e);
+    gesture.current = { kind: "move", id: a.id, offset: { x: p.x - a.x, y: p.y - a.y }, base: anns };
+  };
+
+  const editAnnotation = (id: string) => ctlRef.current.setEditing(id);
 
   const renderAnn = (a: Ann, isDraft = false): ReactNode => {
     const selected = !isDraft && ctl.selectedId === a.id;
@@ -547,6 +547,13 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
         data-type={a.type}
         className={cn("absolute", selected && "z-10 outline outline-2 outline-blue-600")}
         style={boxStyle}
+        onPointerDown={(e) => {
+          if (!interactive) return;
+          selectAnnotation(e, a);
+        }}
+        onDoubleClick={() => {
+          if (interactive && isText) editAnnotation(a.id);
+        }}
       >
         {body}
         {editing && isText && (
@@ -556,11 +563,11 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
             aria-label="Edit text"
             onChange={(e) => {
               const txt = e.target.value;
-              ctl.live(entry.uid, anns.map((x) => (x.id === a.id ? { ...x, text: txt } : x)));
+              ctlRef.current.live(entry.uid, anns.map((x) => (x.id === a.id ? { ...x, text: txt } : x)));
             }}
             onBlur={() => {
-              ctl.endGesture();
-              ctl.setEditing(null);
+              ctlRef.current.endGesture();
+              ctlRef.current.setEditing(null);
             }}
             onKeyDown={(e) => {
               if (e.key === "Escape") (e.target as HTMLTextAreaElement).blur();
@@ -575,6 +582,11 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
           <div
             data-handle
             aria-label="Resize"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              gesture.current = { kind: "resize", id: a.id, base: anns };
+            }}
             className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize rounded-sm border border-white bg-blue-600"
           />
         )}
@@ -584,6 +596,8 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
 
   const cursor = tool === "select" ? "default" : tool === "hand" ? "grab" : tool === "text" || tool === "edittext" ? "text" : "crosshair";
   const crop = entry.crop;
+
+  /* eslint-enable react-hooks/refs */
 
   return (
     <div
@@ -603,12 +617,6 @@ export default function PageView({ entry, index, pdf, anns, zoom, hitBoxes, acti
         className="absolute inset-0 z-[3]"
         style={{ pointerEvents: tool === "select" ? "none" : "auto", cursor }}
         onPointerDown={onDown}
-        onDoubleClick={(e) => {
-          if (ctlRef.current.tool !== "select") return;
-          const id = (e.target as HTMLElement).closest("[data-ann]")?.getAttribute("data-ann");
-          const ann = anns.find((item) => item.id === id);
-          if (ann && TEXT_TYPES.has(ann.type)) ctlRef.current.setEditing(ann.id);
-        }}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}

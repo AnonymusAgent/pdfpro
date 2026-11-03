@@ -12,11 +12,12 @@ import { Readable, Transform } from "node:stream";
 import { and, asc, desc, eq, ilike, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { userFiles } from "@/db/schema";
-import { HttpError } from "./api";
+import { boundedInt, HttpError } from "./api";
 import { config } from "./config";
 import { randomUUID, safeEqualStrings, sanitizeFileName } from "./crypto";
+import { pdfChunks } from "./pdf-upload";
 import { getEntitlements, type DbExecutor } from "./entitlements";
-import { getStorageDriver } from "./storage/driver";
+import { getStorageDriver, getStorageDriverFor } from "./storage/driver";
 
 export type FileRecord = {
   id: string;
@@ -36,7 +37,6 @@ export type ListOptions = {
   offset?: number;
 };
 
-const PDF_MAGIC = Buffer.from("%PDF-", "latin1");
 
 function toRecord(row: typeof userFiles.$inferSelect): FileRecord {
   return {
@@ -51,8 +51,8 @@ function toRecord(row: typeof userFiles.$inferSelect): FileRecord {
 }
 
 export async function listUserFiles(userId: string, options: ListOptions = {}) {
-  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
-  const offset = Math.max(0, options.offset ?? 0);
+  const limit = boundedInt(options.limit ?? 50, 50, 1, 100);
+  const offset = boundedInt(options.offset ?? 0, 0, 0, 1_000_000);
   const sort = options.sort ?? "created";
   const direction = options.order === "asc" ? asc : desc;
   const needle = options.q?.trim().slice(0, 120) ?? "";
@@ -88,11 +88,6 @@ export async function getOwnedFile(userId: string, fileId: string) {
     .limit(1);
   if (!row) throw new HttpError(404, "File not found.", "not_found");
   return row;
-}
-
-/** Reads the first chunk to confirm the payload really is a PDF. */
-async function peekPdf(head: Buffer): Promise<boolean> {
-  return head.length >= PDF_MAGIC.length && head.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC);
 }
 
 export async function uploadPdfFile(params: {
@@ -140,12 +135,7 @@ export async function uploadPdfFile(params: {
   const webStream = params.file.stream() as unknown as ReadableStream<Uint8Array>;
   const source = Readable.fromWeb(webStream as Parameters<typeof Readable.fromWeb>[0]);
   const iterator = source[Symbol.asyncIterator]();
-  const first = await iterator.next();
-  if (first.done) throw new HttpError(400, "The uploaded file is empty.", "empty_file");
-  const head = Buffer.from(first.value as Uint8Array);
-  if (!(await peekPdf(head))) {
-    throw new HttpError(415, "Only PDF files can be uploaded to cloud storage.", "unsupported_type");
-  }
+  const chunks = await pdfChunks(iterator);
 
   let written = 0;
   const hash = createHash("sha256");
@@ -157,17 +147,8 @@ export async function uploadPdfFile(params: {
     },
   });
 
-  async function* remainder() {
-    yield head;
-    let next = await iterator.next();
-    while (!next.done) {
-      yield next.value as Uint8Array;
-      next = await iterator.next();
-    }
-  }
-
   try {
-    await driver.putStream(storageKey, Readable.from(remainder()).pipe(hasher), {
+    await driver.putStream(storageKey, Readable.from(chunks).pipe(hasher), {
       contentType: "application/pdf",
       contentLength: declaredSize,
     });
@@ -288,7 +269,7 @@ export async function deleteUserFile(userId: string, fileId: string): Promise<{ 
 
   // The record is gone for the user; storage cleanup is best effort but retried
   // by the maintenance job for any object that could not be removed.
-  await getStorageDriver(row.storageDriver).delete(row.storageKey).catch(() => undefined);
+  await getStorageDriverFor(row.storageDriver).delete(row.storageKey).catch(() => undefined);
   return { reclaimedBytes: size };
 }
 
@@ -299,7 +280,7 @@ export async function readFileStream(fileId: string): Promise<{ stream: Readable
     .where(and(eq(userFiles.id, fileId), eq(userFiles.status, "active")))
     .limit(1);
   if (!row) throw new HttpError(404, "File not found.", "not_found");
-  return { stream: await getStorageDriver(row.storageDriver).getStream(row.storageKey), row };
+  return { stream: await getStorageDriverFor(row.storageDriver).getStream(row.storageKey), row };
 }
 
 /* ------------------------------------------------------------------ */
@@ -380,7 +361,7 @@ export async function finalizePendingDeletions(limit = 50): Promise<{ purged: nu
   let purged = 0;
   for (const row of rows) {
     try {
-      await getStorageDriver(row.storageDriver).delete(row.storageKey);
+      await getStorageDriverFor(row.storageDriver).delete(row.storageKey);
       const [removed] = await db.delete(userFiles).where(eq(userFiles.id, row.id)).returning({ id: userFiles.id });
       if (removed) purged += 1;
     } catch {

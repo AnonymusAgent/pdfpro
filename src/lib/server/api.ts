@@ -45,13 +45,36 @@ export function errorResponse(error: unknown): Response {
   return Response.json({ error: "Something went wrong. Please try again.", code: "internal_error" }, { status: 500 });
 }
 
+/** Normalize public pagination parameters instead of passing NaN/fractions to SQL LIMIT. */
+export function boundedInt(value: number, fallback: number, min: number, max: number): number {
+  return Number.isFinite(value) ? Math.max(min, Math.min(max, Math.floor(value))) : fallback;
+}
+
 export async function readJson<T = Record<string, unknown>>(request: Request, maxBytes = 64 * 1024): Promise<T> {
-  const raw = await request.text();
-  if (raw.length > maxBytes) throw new HttpError(413, "Request body is too large.", "payload_too_large");
-  if (!raw) return {} as T;
+  const reader = request.body?.getReader();
+  if (!reader) return {} as T;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    size += next.value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new HttpError(413, "Request body is too large.", "payload_too_large");
+    }
+    chunks.push(next.value);
+  }
+  if (!size) return {} as T;
+  const raw = Buffer.concat(chunks, size).toString("utf8");
   try {
-    return JSON.parse(raw) as T;
-  } catch {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new HttpError(400, "Request body must be a JSON object.", "invalid_json");
+    }
+    return parsed as T;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
     throw new HttpError(400, "Request body must be JSON.", "invalid_json");
   }
 }

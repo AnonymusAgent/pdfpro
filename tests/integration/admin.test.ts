@@ -74,6 +74,10 @@ describe("admin authorisation", () => {
     expect(created.body.email).toBe(email.toLowerCase());
     const duplicate = await admin.client.post("/api/admin/users", { email, password: "Managed-Pass123" });
     expect(duplicate.status).toBe(409);
+    expect((await admin.client.get("/api/admin/users?limit=NaN&offset=broken")).status).toBe(200);
+    expect((await admin.client.get("/api/admin/payments?limit=NaN")).status).toBe(200);
+    expect((await admin.client.get("/api/admin/outbox?limit=NaN")).status).toBe(200);
+    expect((await admin.client.get("/api/admin/webhooks?limit=NaN")).status).toBe(200);
     const adminSession = await admin.client.get<{ user: { id: string } }>("/api/auth/session");
     expect(adminSession.body.user.id).toBe(admin.userId);
     const newUser = new Client("managed");

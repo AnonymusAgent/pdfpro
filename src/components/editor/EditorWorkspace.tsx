@@ -730,55 +730,55 @@ function EditorBody({ doc, openMore }: { doc: DocRecord; openMore: () => void })
 
   useEffect(() => {
     keyHandler.current = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      const typing = !!t?.closest?.("input, textarea, select, [contenteditable='true']");
-      const mod = e.metaKey || e.ctrlKey;
-      const k = e.key.toLowerCase();
-      if (mod && k === "z" && !e.shiftKey) {
-        if (typing) return;
-        e.preventDefault();
-        undo(doc.id);
-        return;
-      }
-      if (mod && ((k === "z" && e.shiftKey) || k === "y")) {
-        if (typing) return;
-        e.preventDefault();
-        redo(doc.id);
-        return;
-      }
-      if (mod && k === "f") {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      if (mod && k === "s") {
-        e.preventDefault();
-        setExportOpen(true);
-        return;
-      }
-      if (mod && k === "p") {
-        e.preventDefault();
-        void printNow();
-        return;
-      }
-      if (typing || mod || e.altKey) return;
-      if ((e.key === "Delete" || e.key === "Backspace") && selected) {
-        e.preventDefault();
-        deleteSelected();
-        return;
-      }
-      if (e.key === "Escape") {
-        setSelectedId(null);
-        setEditingId(null);
-        setTool("select");
-        return;
-      }
-      if (e.key === "ArrowRight" || e.key === "PageDown") goTo(page + 1);
-      else if (e.key === "ArrowLeft" || e.key === "PageUp") goTo(page - 1);
-      else if (e.key === "+" || e.key === "=") setZoomMode((z) => clamp((typeof z === "number" ? z : zoom) + 0.1, 0.2, 4));
-      else if (e.key === "-") setZoomMode((z) => clamp((typeof z === "number" ? z : zoom) - 0.1, 0.2, 4));
-      else if (e.key === "0") setZoomMode("width");
-      else if (SHORTCUTS[k]) setTool(SHORTCUTS[k]);
+    const t = e.target as HTMLElement | null;
+    const typing = !!t?.closest?.("input, textarea, select, [contenteditable='true']");
+    const mod = e.metaKey || e.ctrlKey;
+    const k = e.key.toLowerCase();
+    if (mod && k === "z" && !e.shiftKey) {
+      if (typing) return;
+      e.preventDefault();
+      undo(doc.id);
+      return;
+    }
+    if (mod && ((k === "z" && e.shiftKey) || k === "y")) {
+      if (typing) return;
+      e.preventDefault();
+      redo(doc.id);
+      return;
+    }
+    if (mod && k === "f") {
+      e.preventDefault();
+      searchRef.current?.focus();
+      return;
+    }
+    if (mod && k === "s") {
+      e.preventDefault();
+      setExportOpen(true);
+      return;
+    }
+    if (mod && k === "p") {
+      e.preventDefault();
+      void printNow();
+      return;
+    }
+    if (typing || mod || e.altKey) return;
+    if ((e.key === "Delete" || e.key === "Backspace") && selected) {
+      e.preventDefault();
+      deleteSelected();
+      return;
+    }
+    if (e.key === "Escape") {
+      setSelectedId(null);
+      setEditingId(null);
+      setTool("select");
+      return;
+    }
+    if (e.key === "ArrowRight" || e.key === "PageDown") goTo(page + 1);
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") goTo(page - 1);
+    else if (e.key === "+" || e.key === "=") setZoomMode((z) => clamp((typeof z === "number" ? z : zoom) + 0.1, 0.2, 4));
+    else if (e.key === "-") setZoomMode((z) => clamp((typeof z === "number" ? z : zoom) - 0.1, 0.2, 4));
+    else if (e.key === "0") setZoomMode("width");
+    else if (SHORTCUTS[k]) setTool(SHORTCUTS[k]);
     };
   });
 

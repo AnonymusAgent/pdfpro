@@ -62,12 +62,12 @@ checksum changed.
 (Free 200 MiB, Premium 2 GiB) and lowers the default upload cap to 50 MiB — only for rows that
 still hold the original defaults, so customised plans survive.
 
-`drizzle/0003_workspace_ownership.sql` adds nullable owners to existing document history,
-processing jobs and saved signatures. **It does not overwrite or delete legacy rows.** Old
-unattributed rows remain in PostgreSQL but are hidden from user endpoints until an operator
-can prove ownership; never assign them to the first person who visits. New account records
-are owner-scoped in both SQL queries and transaction-local RLS context. Unauthenticated
-visitors instead keep new workspace metadata in that browser's local storage.
+`drizzle/0003_private_workspace.sql` adds a workspace scope to existing document history,
+processing jobs and saved signatures, and archives old preferences separately. **It does not
+overwrite or delete legacy rows.** Old unattributed records remain in PostgreSQL under the
+`legacy` workspace, hidden from user and guest endpoints until an operator can prove ownership;
+never assign them to the first person who visits. New account records use `user:<id>` and
+guests receive an opaque HttpOnly cookie tied to a private `guest:<token>` workspace.
 
 Before running migrations against an existing project, verify the **exact database name** in
 the connection URL (the Neon project name and PostgreSQL database name can differ), take a

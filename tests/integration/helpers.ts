@@ -102,6 +102,10 @@ export class Client {
     return this.request<T>(path, { method: "PATCH", json });
   }
 
+  async put<T = Record<string, unknown>>(path: string, json?: unknown): Promise<ApiResponse<T>> {
+    return this.request<T>(path, { method: "PUT", json });
+  }
+
   async del<T = Record<string, unknown>>(path: string): Promise<ApiResponse<T>> {
     return this.request<T>(path, { method: "DELETE" });
   }

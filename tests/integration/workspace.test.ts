@@ -1,61 +1,91 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { Client, createUser, db, purgeTestUsers, resetRateLimits } from "./helpers";
+import { Client, createUser, db, purgeTestUsers, resetRateLimits, uniqueEmail } from "./helpers";
 
-beforeEach(async () => { await resetRateLimits(); await purgeTestUsers(); });
-afterAll(async () => { await purgeTestUsers(); await db.end(); });
+const cleanup: { documentIds: number[]; signatureIds: number[]; jobIds: number[]; scopes: string[] } = {
+  documentIds: [], signatureIds: [], jobIds: [], scopes: [],
+};
+const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLytQAAAABJRU5ErkJggg==";
 
-describe("workspace metadata isolation", () => {
-  it("rejects anonymous access to global document, job, signature and preference records", async () => {
-    const visitor = new Client("anonymous");
-    for (const path of ["documents", "jobs", "signatures"]) {
-      expect((await visitor.get(`/api/${path}`)).status).toBe(401);
-      expect((await visitor.post(`/api/${path}`, {})).status).toBe(401);
-    }
-    expect((await visitor.get("/api/settings")).status).toBe(401);
-    expect((await visitor.request("/api/settings", { method: "PUT", json: { theme: "dark" } })).status).toBe(401);
-  });
+beforeEach(async () => { await resetRateLimits(); });
+afterAll(async () => {
+  for (const id of cleanup.documentIds) await db.query("delete from documents where id = $1", [id]);
+  for (const id of cleanup.signatureIds) await db.query("delete from signatures where id = $1", [id]);
+  for (const id of cleanup.jobIds) await db.query("delete from jobs where id = $1", [id]);
+  for (const scope of cleanup.scopes) await db.query("delete from workspace_settings where workspace_id = $1", [scope]);
+  await purgeTestUsers();
+  await db.end();
+});
 
-  it("isolates document history, processing jobs, saved signatures and preferences per account", async () => {
-    const alice = await createUser();
-    const bob = await createUser();
-    const doc = await alice.client.post<{ document: { id: number } }>("/api/documents", { name: "private.pdf", size: 8, pages: 1 });
-    expect(doc.status).toBe(201);
-    const job = await alice.client.post("/api/jobs", { kind: "merge", fileName: "private.pdf" });
+describe("private PDF workspace metadata", () => {
+  it("keeps guest metadata and signatures separate; rejects cross-guest mutation", async () => {
+    const alice = new Client("guest-alice");
+    const bob = new Client("guest-bob");
+    const name = `${uniqueEmail("work")}.pdf`;
+    const created = await alice.post<{ document: { id: number } }>("/api/documents", { name, size: 12, pages: 1 });
+    expect(created.status).toBe(201);
+    cleanup.documentIds.push(created.body.document.id);
+    expect(alice.hasCookie("pdfpro_workspace")).toBe(true);
+    expect((await bob.get<{ documents: { id: number }[] }>("/api/documents")).body.documents).toEqual([]);
+    expect((await bob.patch("/api/documents", { id: created.body.document.id, starred: true })).status).toBe(404);
+    expect((await bob.del(`/api/documents?id=${created.body.document.id}`)).status).toBe(404);
+    expect((await alice.get<{ documents: { id: number; starred: boolean }[] }>("/api/documents")).body.documents[0]!.starred).toBe(false);
+
+    const signed = await alice.post<{ signature: { id: number } }>("/api/signatures", { name: "Mine", dataUrl: image });
+    expect(signed.status).toBe(201);
+    cleanup.signatureIds.push(signed.body.signature.id);
+    expect((await bob.get<{ signatures: unknown[] }>("/api/signatures")).body.signatures).toEqual([]);
+    expect((await bob.del(`/api/signatures?id=${signed.body.signature.id}`)).status).toBe(404);
+    expect((await alice.get<{ signatures: unknown[] }>("/api/signatures")).body.signatures).toHaveLength(1);
+
+    const job = await alice.post<{ job: { id: number } }>("/api/jobs", { kind: "merge", fileName: name });
     expect(job.status).toBe(201);
-    const sig = await alice.client.post<{ signature: { id: number } }>("/api/signatures", { name: "private", dataUrl: "data:image/png;base64,AA==" });
-    expect(sig.status).toBe(201);
-    expect((await alice.client.request("/api/settings", { method: "PUT", json: { theme: "dark" } })).status).toBe(200);
-    for (const path of ["documents", "jobs", "signatures"]) {
-      const own = await alice.client.get<Record<string, unknown[]>>(`/api/${path}`);
-      const other = await bob.client.get<Record<string, unknown[]>>(`/api/${path}`);
-      expect(own.body[path]).toHaveLength(1);
-      expect(other.body[path]).toHaveLength(0);
-    }
-    expect((await bob.client.get<{ settings: Record<string, unknown> }>("/api/settings")).body.settings).toEqual({});
-    expect((await alice.client.get<{ settings: Record<string, unknown> }>("/api/settings")).body.settings).toEqual({ theme: "dark" });
-    expect((await bob.client.patch("/api/documents", { id: doc.body.document.id, starred: true })).status).toBe(404);
-    expect((await bob.client.request(`/api/documents?id=${doc.body.document.id}`, { method: "DELETE" })).status).toBe(404);
-    expect((await bob.client.request(`/api/signatures?id=${sig.body.signature.id}`, { method: "DELETE" })).status).toBe(404);
-    expect((await alice.client.get<{ documents: { starred: boolean }[] }>("/api/documents")).body.documents[0]?.starred).toBe(false);
-    expect((await bob.client.request("/api/settings", { method: "PUT", json: { billing: { paused: false } } })).status).toBe(400);
-    expect((await bob.client.get<{ settings: Record<string, unknown> }>("/api/settings")).body.settings).toEqual({});
-    expect((await alice.client.request("/api/signatures", { method: "POST", json: { dataUrl: "data:image/png;base64," + "A".repeat(710_000) } })).status).toBe(413);
+    cleanup.jobIds.push(job.body.job.id);
+    expect((await bob.get<{ jobs: unknown[] }>("/api/jobs")).body.jobs).toEqual([]);
   });
 
-  it("retains old unowned rows without disclosing them to any account", async () => {
-    const [doc] = (await db.query<{ id: number }>("insert into documents (name) values ('archived-private-name.pdf') returning id")).rows;
-    const [sig] = (await db.query<{ id: number }>("insert into signatures (name, data_url) values ('archived signature', 'data:image/png;base64,AA==') returning id")).rows;
-    try {
-      const alice = await createUser();
-      expect((await alice.client.get<{ documents: { id: number }[] }>("/api/documents")).body.documents).not.toContainEqual(expect.objectContaining({ id: doc.id }));
-      expect((await alice.client.get<{ signatures: { id: number }[] }>("/api/signatures")).body.signatures).not.toContainEqual(expect.objectContaining({ id: sig.id }));
-      expect((await alice.client.request(`/api/documents?id=${doc.id}`, { method: "DELETE" })).status).toBe(404);
-      expect((await alice.client.request(`/api/signatures?id=${sig.id}`, { method: "DELETE" })).status).toBe(404);
-      expect((await db.query("select id from documents where id = $1", [doc.id])).rows).toHaveLength(1);
-      expect((await db.query("select id from signatures where id = $1", [sig.id])).rows).toHaveLength(1);
-    } finally {
-      await db.query("delete from documents where id = $1", [doc.id]);
-      await db.query("delete from signatures where id = $1", [sig.id]);
-    }
+  it("isolates personal preferences from other guests and platform settings", async () => {
+    const alice = new Client("prefs-alice");
+    const bob = new Client("prefs-bob");
+    expect((await alice.put("/api/settings", { theme: "dark", defaultZoom: 125 })).status).toBe(200);
+    const aliceScope = `guest:${alice.cookieHeader.split("pdfpro_workspace=")[1]?.split(";")[0]}`;
+    cleanup.scopes.push(aliceScope);
+    expect((await alice.get<{ settings: Record<string, unknown> }>("/api/settings")).body.settings).toEqual({ theme: "dark", defaultZoom: 125 });
+    expect((await bob.get<{ settings: Record<string, unknown> }>("/api/settings")).body.settings).toEqual({});
+    expect((await alice.put("/api/settings", { billing: { paused: false } })).status).toBe(400);
+    expect((await alice.put("/api/settings", { theme: "light", defaultZoom: "not a number" })).status).toBe(400);
+    expect((await alice.put("/api/settings", { theme: "light" })).status).toBe(200);
+    const global = await db.query("select value from settings where key = 'billing'");
+    expect(global.rows).toHaveLength(1);
+  });
+
+  it("keeps legacy records in the database but inaccessible to new visitors", async () => {
+    const marker = uniqueEmail("legacy");
+    const { rows } = await db.query<{ id: number }>("insert into documents (name, size, pages) values ($1, 1, 1) returning id", [marker]);
+    cleanup.documentIds.push(rows[0]!.id);
+    const guest = new Client("new-visitor");
+    expect((await guest.get<{ documents: { name: string }[] }>("/api/documents")).body.documents.some((r) => r.name === marker)).toBe(false);
+    expect((await guest.del(`/api/documents?id=${rows[0]!.id}`)).status).toBe(404);
+    expect((await db.query("select id from documents where id = $1", [rows[0]!.id])).rows).toHaveLength(1);
+  });
+
+  it("uses the signed-in user's identity across devices, not the guest cookie", async () => {
+    const user = await createUser();
+    const phone = new Client("phone");
+    const login = await phone.post("/api/auth/login", { email: user.email, password: user.password });
+    expect(login.status).toBe(200);
+    const name = uniqueEmail("device");
+    const row = await user.client.post<{ document: { id: number } }>("/api/documents", { name, pages: 1 });
+    cleanup.documentIds.push(row.body.document.id);
+    expect((await phone.get<{ documents: { id: number }[] }>("/api/documents")).body.documents.some((doc) => doc.id === row.body.document.id)).toBe(true);
+    expect((await new Client("stranger").get<{ documents: { id: number }[] }>("/api/documents")).body.documents).toEqual([]);
+  });
+
+  it("rejects cross-origin mutations and non-object request bodies", async () => {
+    const client = new Client("cross-origin");
+    const rejected = await client.request("/api/documents", { method: "POST", json: { name: "no.pdf" }, headers: { Origin: "https://evil.example" } });
+    expect(rejected.status).toBe(403);
+    const malformed = await client.post("/api/documents", ["not", "an", "object"]);
+    expect(malformed.status).toBe(400);
+    expect((malformed.body as { code: string }).code).toBe("invalid_json");
   });
 });

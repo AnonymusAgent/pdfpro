@@ -11,16 +11,16 @@ import {
   bigserial,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 /* ------------------------------------------------------------------ */
-/* Existing workspace tables (additive ownership; old rows retained) */
+/* Existing workspace tables (additive owner columns; keep legacy rows) */
 /* ------------------------------------------------------------------ */
 
 export const documents = pgTable("documents", {
   id: serial("id").primaryKey(),
-  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   size: integer("size").notNull().default(0),
   pages: integer("pages").notNull().default(0),
@@ -28,16 +28,24 @@ export const documents = pgTable("documents", {
   starred: boolean("starred").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  workspaceId: text("workspace_id").notNull().default("legacy"),
 });
 
 export const signatures = pgTable("signatures", {
   id: serial("id").primaryKey(),
-  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   dataUrl: text("data_url").notNull(),
   kind: text("kind").notNull().default("draw"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  workspaceId: text("workspace_id").notNull().default("legacy"),
 });
+
+export const workspaceSettings = pgTable("workspace_settings", {
+  workspaceId: text("workspace_id").notNull(),
+  key: text("key").notNull(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.key] })]);
 
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
@@ -48,7 +56,6 @@ export const settings = pgTable("settings", {
 
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
-  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   kind: text("kind").notNull(),
   fileName: text("file_name").notNull(),
   status: text("status").notNull().default("completed"),
@@ -56,6 +63,7 @@ export const jobs = pgTable("jobs", {
   outputSize: integer("output_size").notNull().default(0),
   message: text("message"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  workspaceId: text("workspace_id").notNull().default("legacy"),
 });
 
 /* ------------------------------------------------------------------ */

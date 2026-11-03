@@ -159,8 +159,9 @@ function Overview() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
-    return () => clearTimeout(timer);
+    // Data fetch on mount / filter change; the loader is set inside `load`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, [load]);
 
   const runLifecycle = async () => {
@@ -429,8 +430,9 @@ function SubscriptionsPanel() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
-    return () => clearTimeout(timer);
+    // Data fetch on mount / filter change; the loader is set inside `load`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, [load]);
 
   const cancelNow = async (email: string) => {
@@ -512,8 +514,9 @@ function PaymentsPanel() {
   }, [status]);
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
-    return () => clearTimeout(timer);
+    // Data fetch on mount / filter change; the loader is set inside `load`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, [load]);
 
   return (
@@ -592,8 +595,9 @@ function PlansPanel() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
-    return () => clearTimeout(timer);
+    // Data fetch on mount / filter change; the loader is set inside `load`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, [load]);
 
   const update = (id: string, patch: Partial<PlanDTO>) => {
@@ -874,8 +878,9 @@ function OpsPanel() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
-    return () => clearTimeout(timer);
+    // Data fetch on mount / filter change; the loader is set inside `load`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, [load]);
 
   const copyText = useMemo(() => (email: OutboxEmail) => `${email.subject}\n\n${email.body}`, []);

@@ -1,47 +1,49 @@
 import { db } from "@/db";
-import { settings } from "@/db/schema";
-import { like } from "drizzle-orm";
+import { workspaceSettings } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import { assertSameOrigin, errorResponse, HttpError, readJson } from "@/lib/server/api";
-import { requireSession } from "@/lib/server/session";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { workspaceScope } from "@/lib/server/workspace-scope";
 
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Validator = (v: unknown) => boolean;
+type Validator = (value: unknown) => boolean;
+
+/** Only personal editor settings; global billing/AdSense/storage settings are separate. */
 const RULES: Record<string, Validator> = {
   theme: (v) => v === "light" || v === "dark",
-  defaultZoom: (v) => typeof v === "number" && v >= 25 && v <= 400,
+  defaultZoom: (v) => typeof v === "number" && Number.isFinite(v) && v >= 25 && v <= 400,
   defaultView: (v) => v === "continuous" || v === "single" || v === "two-page",
-  maxFileMB: (v) => typeof v === "number" && v >= 1 && v <= 500,
+  maxFileMB: (v) => typeof v === "number" && Number.isFinite(v) && v >= 1 && v <= 500,
   autosave: (v) => typeof v === "boolean",
   ocrLang: (v) => typeof v === "string" && /^[a-z]{3}(\+[a-z]{3}){0,3}$/.test(v),
 };
 
-/** Global billing, storage and AdSense keys never leave the admin API. */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { user } = await requireSession();
-    const prefix = `user:${user.id}:pref:`;
-    const rows = await db.select({ key: settings.key, value: settings.value }).from(settings).where(like(settings.key, `${prefix}%`));
+    const owner = await workspaceScope(request);
+    const rows = await db.select({ key: workspaceSettings.key, value: workspaceSettings.value }).from(workspaceSettings).where(eq(workspaceSettings.workspaceId, owner));
     const out: Record<string, unknown> = {};
-    for (const row of rows) out[row.key.slice(prefix.length)] = row.value;
-    return Response.json({ settings: out }, { headers: { "Cache-Control": "private, no-store" } });
+    for (const row of rows) if (Object.hasOwn(RULES, row.key)) out[row.key] = row.value;
+    return Response.json({ settings: out });
   } catch (error) { return errorResponse(error); }
 }
 
-export async function PUT(req: Request) {
+export async function PUT(request: Request) {
   try {
-    assertSameOrigin(req);
-    const { user } = await requireSession();
-    const body = await readJson<Record<string, unknown>>(req);
-    if (body === null || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "Settings must be an object.", "invalid_settings");
+    assertSameOrigin(request);
+    const owner = await workspaceScope(request);
+    await enforceRateLimit(`workspace-settings:${owner}`, 120, 3600);
+    const body = await readJson<Record<string, unknown>>(request);
     const entries = Object.entries(body);
-    const invalid = entries.filter(([key, value]) => !Object.hasOwn(RULES, key) || !RULES[key](value)).map(([key]) => key);
+    const unknown = entries.map(([key]) => key).filter((key) => !Object.hasOwn(RULES, key));
+    if (unknown.length) throw new HttpError(400, `Unknown setting(s): ${unknown.join(", ")}`, "invalid_settings");
+    const invalid = entries.filter(([key, value]) => !RULES[key]!(value)).map(([key]) => key);
     if (invalid.length) throw new HttpError(400, `Invalid value for: ${invalid.join(", ")}`, "invalid_settings");
     await db.transaction(async (tx) => {
       for (const [key, value] of entries) {
-        await tx.insert(settings).values({ key: `user:${user.id}:pref:${key}`, value: value as never })
-          .onConflictDoUpdate({ target: settings.key, set: { value: value as never, updatedAt: new Date() } });
+        await tx.insert(workspaceSettings).values({ workspaceId: owner, key, value: value as never })
+          .onConflictDoUpdate({ target: [workspaceSettings.workspaceId, workspaceSettings.key], set: { value: value as never, updatedAt: new Date() } });
       }
     });
     return Response.json({ ok: true });

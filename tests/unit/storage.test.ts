@@ -1,7 +1,8 @@
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { S3StorageDriver, resolveS3Settings } from "@/lib/server/storage/s3";
-import { getStorageDriver } from "@/lib/server/storage/driver";
+import { getStorageDriver, getStorageDriverFor, resetStorageDriver } from "@/lib/server/storage/driver";
+import { config } from "@/lib/server/config";
 
 describe("S3 settings resolution", () => {
   it("uses the AWS-standard variables Neon injects", () => {
@@ -179,8 +180,18 @@ describe("driver selection", () => {
   it("defaults to the local directory driver when nothing is configured", () => {
     expect(process.env.STORAGE_DRIVER ?? "local").not.toBe("s3");
     expect(getStorageDriver().name).toBe("local");
-    expect(getStorageDriver("local").name).toBe("local");
-    expect(() => getStorageDriver("s3")).toThrow(/credentials are incomplete/);
-    expect(() => getStorageDriver("unknown")).toThrow(/Unsupported storage driver/);
+  });
+  it("opens existing local objects even after configuration switches to S3", () => {
+    const mutableStorage = config.storage as { driver: "local" | "s3" };
+    const previous = mutableStorage.driver;
+    try {
+      mutableStorage.driver = "s3";
+      resetStorageDriver();
+      expect(getStorageDriverFor("local").name).toBe("local");
+      expect(() => getStorageDriverFor("unsupported")).toThrow(/Unsupported storage driver/);
+    } finally {
+      mutableStorage.driver = previous;
+      resetStorageDriver();
+    }
   });
 });

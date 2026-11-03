@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { errorResponse } from "@/lib/server/api";
+import { boundedInt, errorResponse } from "@/lib/server/api";
 import { requireAdmin } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     await requireAdmin();
     const params = new URL(request.url).searchParams;
     const status = params.get("status");
-    const limit = Math.min(200, Math.max(1, Number(params.get("limit") ?? 50)));
+    const limit = boundedInt(Number(params.get("limit") ?? 50), 50, 1, 200);
     const allowed = ["pending", "succeeded", "failed", "refunded", "cancelled"];
     const filter = status && allowed.includes(status) ? status : "";
 

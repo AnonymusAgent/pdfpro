@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { errorResponse, HttpError, readJson, assertSameOrigin } from "@/lib/server/api";
+import { boundedInt, errorResponse, HttpError, readJson, assertSameOrigin } from "@/lib/server/api";
 import { requireAdmin } from "@/lib/server/session";
 import { createManagedUser } from "@/lib/server/auth";
 import { clientIp, hashIp } from "@/lib/server/api";
@@ -15,8 +15,8 @@ export async function GET(request: Request) {
     await requireAdmin();
     const params = new URL(request.url).searchParams;
     const q = (params.get("q") ?? "").trim().slice(0, 120);
-    const limit = Math.min(100, Math.max(1, Number(params.get("limit") ?? 25)));
-    const offset = Math.max(0, Number(params.get("offset") ?? 0));
+    const limit = boundedInt(Number(params.get("limit") ?? 25), 25, 1, 100);
+    const offset = boundedInt(Number(params.get("offset") ?? 0), 0, 0, 1_000_000);
     const like = `%${q.toLowerCase()}%`;
 
     const rows = await db.execute<{
